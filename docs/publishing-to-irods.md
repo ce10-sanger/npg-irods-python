@@ -6,7 +6,7 @@ Main Options
 
 |         | Python stack                                                        | Perl stack                                      |
 | ------- | ------------------------------------------------------------------- | ----------------------------------------------- |
-| Script  | Option A<br><br>`publish-directory` utility from `npg-irods-python` | Option C<br><br>`npg_publish_tree.py`           |
+| Script  | Option A<br><br>`publish-directory` utility from `npg-irods-python` | Option C<br><br>`npg_publish_tree.pl`           |
 | Library | Option B<br><br>Build on top of `partisan`                          | Option D<br><br>Build on top of `TreePublisher` |
 
 
@@ -31,7 +31,7 @@ Good for...
 - More complex requirements around permissions
 - Calling from within a Python application
 
-### Option C: `npg_publish_tree.py`
+### Option C: `npg_publish_tree.pl`
 
 Maintaining existing implementations that already use this approach
 
