@@ -17,19 +17,19 @@ Good for...
 - Simpler requirements around permissions
 - Calling from outside a Python application
 
-### Option B: Build on top of `partisan` library
-
-Good for...
-
-- More complex requirements around permissions
-- Calling from within a Python application
-
 How to use....
 
 - One call per set of common permissions
 - Select scope using `--exclude`, `--include` (1) and `--max-depth` (1)
 
 (1) To be implemented
+
+### Option B: Build on top of `partisan` library
+
+Good for...
+
+- More complex requirements around permissions
+- Calling from within a Python application
 
 ### Option C: `npg_publish_tree.py`
 
