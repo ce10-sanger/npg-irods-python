@@ -22,7 +22,7 @@ from npg_irods.cli import publish_directory
 from pytest import LogCaptureFixture, MonkeyPatch
 from pytest import mark as m
 
-from partisan.irods import Collection, DataObject, AC, Permission, AVU
+from partisan.irods import Collection, DataObject, AC, Permission, AVU, make_rods_item
 
 
 @m.describe("Publish directory utility")
@@ -127,11 +127,27 @@ class TestPublishDirectory:
         assert Collection(empty_collection / "run_id_prefix").acl() == [irods_own]
         assert Collection(empty_collection / "run_id_prefix").metadata() == []
         assert Collection(dest).acl() == [irods_own, public_read]
-        assert Collection(dest).metadata() == [AVU("a1", "v1")]
+        assert Collection(dest).metadata() == [
+            AVU("a1", "v1")
+        ], "No extra automatic metadata added"
+        assert self._has_metadata(
+            dest / "000001_a.txt", ["dcterms:creator", "md5"]
+        ), "Automatic metadata added"
         assert Collection(dest / "000001-a").acl() == [irods_own, ss_1000_read]
-        assert Collection(dest / "000001-a").metadata() == [AVU("a2", "v2")]
+        assert Collection(dest / "000001-a").metadata() == [
+            AVU("a2", "v2")
+        ], "No extra automatic metadata added"
+        assert self._has_metadata(
+            dest / "000001-a" / "000002-c.txt", ["dcterms:creator", "md5"]
+        ), "Automatic metadata added"
 
     @staticmethod
     def _main(args: list[str]):
         with patch("sys.argv", ["publish-directory"] + args):
             publish_directory.main()
+
+    @staticmethod
+    def _has_metadata(path: PurePath, attributes: list[str]):
+        expected_attributes = set(attributes)
+        actual_attributes = {avu.attribute for avu in make_rods_item(path).metadata()}
+        return expected_attributes <= actual_attributes
