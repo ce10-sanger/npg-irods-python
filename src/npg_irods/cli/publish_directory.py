@@ -45,12 +45,12 @@ parser = argparse.ArgumentParser(
 add_logging_arguments(parser)
 
 parser.add_argument(
-    "directory",
+    "directory", "--source", # --source provides backwards compatibility with npg_publish_tree.pl
     help="The local directory to publish to iRODS.",
     type=str,
 )
 parser.add_argument(
-    "collection",
+    "collection", "--collection", # --collection provides backwards compatibility with npg_publish_tree.pl
     help="The iRODS collection to publish the local directory to.",
     type=str,
 )
@@ -122,7 +122,7 @@ parser.add_argument(
     default=[],
 )
 parser.add_argument(
-    "--metadata-file",
+    "--metadata-file", "--metadata", # --metadata provides backwards compatibility with npg_publish_tree.pl
     help="Path to a JSON file containing metadata to add to the published "
     "root collection. The JSON must describe the metadata in baton syntax "
     '(an array of AVUs): E.g. [{"attribute": "attr1", "value": "val1"}]. '
