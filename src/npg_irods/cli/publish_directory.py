@@ -20,6 +20,7 @@
 import argparse
 import json
 import sys
+from enum import Enum
 from pathlib import Path
 
 import structlog
@@ -33,11 +34,15 @@ from npg_irods.functions import make_path_filter
 from npg_irods.publish import publish_directory
 from npg_irods.utilities import read_md5_file
 
+class Mode(str, Enum):
+    fill = "fill"
+    force = "force"
+    error = "error"
+
 description = """
 A utility to (recursively) publish a local directory to iRODS, retaining the directory
 structure.
 """
-
 
 parser = argparse.ArgumentParser(
     description=description, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -100,18 +105,15 @@ parser.add_argument(
     action="store_true",
 )
 
-ff_group = parser.add_mutually_exclusive_group(required=False)
-ff_group.add_argument(
-    "--fill",
-    help="Fill missing data objects and those with mismatched checksums. "
-    "Incompatible with --force.",
-    action="store_true",
-)
-ff_group.add_argument(
-    "--force",
-    help="Force the update of existing data objects. Incompatible with --fill.",
-    action="store_true",
-)
+parser.add_argument("--mode",
+                    type=Mode,
+                    choices=list(Mode),
+                    default=Mode.fill,
+                    help="Optional, defaults to fill."
+                         "\n- fill: Fill missing data objects and those with mismatched checksums."
+                        "\n- force: Force the update of existing data objects."
+                        "\n- error: Report existing data objects as error."
+                    )
 
 parser.add_argument(
     "--group",
@@ -216,12 +218,15 @@ def main():
             )
             raise e
 
+    fill = args.mode == Mode.fill
+    force = args.mode == Mode.force
+
     log.info(
         "Publishing directory",
         src=args.directory,
         dest=args.collection,
-        fill=args.fill,
-        force=args.force,
+        fill=fill,
+        force=force,
         num_clients=num_clients,
     )
 
@@ -249,8 +254,8 @@ def main():
         acl=acl,
         filter_fn=filter_fn,
         local_checksum=checksum_fn,
-        fill=args.fill,
-        force=args.force,
+        fill=fill,
+        force=force,
         handle_exceptions=True,
         num_clients=num_clients,
     )

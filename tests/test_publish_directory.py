@@ -51,6 +51,37 @@ class TestPublishDirectory:
             acl=[],
             filter_fn=None,
             local_checksum=None,
+            fill=True,
+            force=False,
+            handle_exceptions=True,
+            num_clients=4,
+        )
+        assert "Processed all items successfully" in caplog.text
+        assert "num_items=2" in caplog.text
+        assert "num_processed=1" in caplog.text
+        assert "num_errors=0" in caplog.text
+
+    @m.context("When run with error mode")
+    @m.it("Publishes directory and outputs status")
+    @patch("npg_irods.cli.publish_directory.publish_directory", autospec=True)
+    def test_main_normal_case(
+        self, mock_publish_directory: MagicMock, caplog: LogCaptureFixture
+    ):
+        # Arrange
+        mock_publish_directory.return_value = (2, 1, 0)
+
+        # Act
+        with caplog.at_level("DEBUG", "main"):
+            self._main(["directory", "/collection", "--mode=error"])
+
+        # Assert
+        mock_publish_directory.assert_called_once_with(
+            "directory",
+            "/collection",
+            avus=[],
+            acl=[],
+            filter_fn=None,
+            local_checksum=None,
             fill=False,
             force=False,
             handle_exceptions=True,
