@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import json
+import shutil
 from pathlib import Path, PurePath
 from unittest.mock import MagicMock, patch
 
@@ -71,8 +72,8 @@ class TestPublishDirectory:
         monkeypatch: MonkeyPatch,
     ):
         # Arrange
-        src = Path("./tests/data/ultima/minimal").absolute()
-        # TODO: Don't modify original files
+        src = tmp_path / "minimal"
+        shutil.copytree("./tests/data/ultima/minimal", src)
         # empty_collection stands in for $ZONE/ultimagen/runs
         # SOP: Destination collection doesn't exist
         dest = (
