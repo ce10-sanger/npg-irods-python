@@ -98,7 +98,7 @@ class TestPublishDirectory:
         root_args = [
             str(src),
             str(dest),
-            "--force",
+            "--fill",
             "--group",
             "public",
             "--exclude",
@@ -120,7 +120,7 @@ class TestPublishDirectory:
         sample_dir_args = [
             str(src / "000001-a"),
             str(dest / "000001-a"),
-            "--force",
+            "--fill",
             "--group",
             "ss_1000#testZone",
             "--exclude",
@@ -131,7 +131,7 @@ class TestPublishDirectory:
         self._main(sample_dir_args)
 
         # Private
-        private_dir_args = [str(src / "000001-d"), str(dest / "000001-d"), "--force"]
+        private_dir_args = [str(src / "000001-d"), str(dest / "000001-d"), "--fill"]
         self._main(private_dir_args)
 
         # Repeated publish: No changes
