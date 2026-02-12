@@ -145,25 +145,13 @@ class TestPublishDirectory:
         (ultima_run_dir / "c.txt").write_text("new")
         c_txt_original_md5 = get_md5(ultima_run_dir / "c.txt")
         self._main(root_args)
-        created_values = [
-            x
-            for x in DataObject(dest / "c.txt").metadata()
-            if x.attribute == "dcterms:created"
-        ]
-        assert len(created_values) == 1
-        c_txt_original_dcterms_created = created_values[0]
+        c_txt_original_dcterms_created = get_created_metadata(dest / "c.txt")
 
         # Repeated publish: Modified file
         (ultima_run_dir / "c.txt").write_text("modified")
         c_txt_modified_md5 = get_md5(ultima_run_dir / "c.txt")
         self._main(root_args)
-        created_values = [
-            x
-            for x in DataObject(dest / "c.txt").metadata()
-            if x.attribute == "dcterms:created"
-        ]
-        assert len(created_values) == 1
-        c_txt_modified_dcterms_created = created_values[0]
+        c_txt_modified_dcterms_created = get_created_metadata(dest / "c.txt")
         assert (
             c_txt_modified_dcterms_created == c_txt_original_dcterms_created
         ), "Original file creation date should not change when we update contents of the file"
@@ -346,3 +334,13 @@ def assert_rods_item(
 
     if attributes:
         assert [x.attribute for x in rods_item.metadata()] == attributes
+
+def get_created_metadata(path: PurePath | str) -> str:
+    rods_item = make_rods_item(path)
+    dcterms_created = [
+        x
+        for x in rods_item.metadata()
+        if x.attribute == "dcterms:created"
+    ]
+    assert len(dcterms_created) == 1
+    return dcterms_created[0].value
