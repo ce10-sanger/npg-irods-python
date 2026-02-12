@@ -31,7 +31,7 @@ from npg_irods.cli import publish_directory
 from pytest import LogCaptureFixture, MonkeyPatch
 from pytest import mark as m
 
-from partisan.irods import Collection, DataObject, AVU
+from partisan.irods import Collection, DataObject, AVU, make_rods_item, AC
 
 
 @m.describe("Publish directory utility")
@@ -191,22 +191,19 @@ class TestPublishDirectory:
         self._main(sample_dir_updated_args)
 
         # Assert
-        assert is_inheritance_enabled(
-            public_unmanaged_inheritance_enabled_collection / "run_id_prefix"
-        )
-        assert Collection(
-            public_unmanaged_inheritance_enabled_collection / "run_id_prefix"
-        ).acl() == [ADMIN_AC, PUBLIC_AC, UNMANAGED_AC]
-        assert (
-            Collection(
-                public_unmanaged_inheritance_enabled_collection / "run_id_prefix"
-            ).metadata()
-            == []
+        assert_rods_item(
+            public_unmanaged_inheritance_enabled_collection / "run_id_prefix",
+            inherit=True,
+            acl=[ADMIN_AC, PUBLIC_AC, UNMANAGED_AC],
+            metadata=[],
         )
 
-        assert is_inheritance_enabled(dest)
-        assert Collection(dest).acl() == [ADMIN_AC, PUBLIC_AC, UNMANAGED_AC]
-        assert Collection(dest).metadata() == [AVU("a1", "v1")]
+        assert_rods_item(
+            dest,
+            inherit=True,
+            acl=[ADMIN_AC, PUBLIC_AC, UNMANAGED_AC],
+            metadata=[AVU("a1", "v1")],
+        )
 
         assert Collection(dest).contents(recurse=True) == [
             Collection(dest / "000001-a"),
@@ -217,20 +214,37 @@ class TestPublishDirectory:
             DataObject(dest / "000001-a" / "000002-c.txt"),
             DataObject(dest / "000001-d" / "000001-d.txt"),
         ]
-        assert [x.attribute for x in DataObject(dest / "b.txt").metadata()] == [
-            "dcterms:created",
-            "dcterms:creator",
-            "md5",
-            "type",
-        ]
 
-        assert [x.attribute for x in DataObject(dest / "c.txt").metadata()] == [
-            "dcterms:created",
-            "dcterms:creator",
-            "md5",
-            "md5",
-            "type",
-        ]
+        assert_rods_item(
+            dest / "b.txt",
+            acl=[
+                ADMIN_AC,
+                PUBLIC_AC,
+                UNMANAGED_AC,
+            ],
+            attributes=[
+                "dcterms:created",
+                "dcterms:creator",
+                "md5",
+                "type",
+            ],
+        )
+
+        assert_rods_item(
+            dest / "c.txt",
+            acl=[
+                ADMIN_AC,
+                PUBLIC_AC,
+                UNMANAGED_AC,
+            ],
+            attributes=[
+                "dcterms:created",
+                "dcterms:creator",
+                "md5",
+                "md5",
+                "type",
+            ],
+        )
         assert [
             x.value
             for x in DataObject(dest / "c.txt").metadata()
@@ -251,23 +265,16 @@ class TestPublishDirectory:
             PUBLIC_AC,
             UNMANAGED_AC,
         ]
-        assert DataObject(dest / "b.txt").acl() == [
-            ADMIN_AC,
-            PUBLIC_AC,
-            UNMANAGED_AC,
-        ]
-        assert DataObject(dest / "c.txt").acl() == [
-            ADMIN_AC,
-            PUBLIC_AC,
-            UNMANAGED_AC,
-        ]
 
-        assert is_inheritance_enabled(dest / "000001-a")
-        assert Collection(dest / "000001-a").acl() == [
-            ADMIN_AC,
-            STUDY2_AC,
-            UNMANAGED_AC,
-        ]
+        assert_rods_item(
+            dest / "000001-a",
+            inherit=True,
+            acl=[
+                ADMIN_AC,
+                STUDY2_AC,
+                UNMANAGED_AC,
+            ],
+        )
         assert [
             x
             for x in Collection(dest / "000001-a").metadata()
@@ -282,32 +289,60 @@ class TestPublishDirectory:
         )
         assert len(Collection(dest / "000001-a").metadata()) == 4
 
-        assert DataObject(dest / "000001-a" / "000002-c.txt").acl() == [
-            ADMIN_AC,
-            STUDY2_AC,
-            UNMANAGED_AC,
-        ]
-        assert [
-            x.attribute
-            for x in DataObject(dest / "000001-a" / "000002-c.txt").metadata()
-        ] == [
-            "dcterms:created",
-            "dcterms:creator",
-            "md5",
-            "type",
-        ]
+        assert_rods_item(
+            dest / "000001-a" / "000002-c.txt",
+            acl=[
+                ADMIN_AC,
+                STUDY2_AC,
+                UNMANAGED_AC,
+            ],
+            attributes=[
+                "dcterms:created",
+                "dcterms:creator",
+                "md5",
+                "type",
+            ],
+        )
 
-        assert is_inheritance_enabled(dest / "000001-d")
-        assert Collection(dest / "000001-d").acl() == [
-            ADMIN_AC,
-            UNMANAGED_AC,
-        ]
-        assert DataObject(dest / "000001-d" / "000001-d.txt").acl() == [
-            ADMIN_AC,
-            UNMANAGED_AC,
-        ]
+        assert_rods_item(
+            dest / "000001-d",
+            inherit=True,
+            acl=[
+                ADMIN_AC,
+                UNMANAGED_AC,
+            ],
+        )
+        assert_rods_item(
+            dest / "000001-d" / "000001-d.txt",
+            acl=[
+                ADMIN_AC,
+                UNMANAGED_AC,
+            ],
+        )
 
     @staticmethod
     def _main(args: list[str]):
         with patch("sys.argv", ["publish-directory"] + args):
             publish_directory.main()
+
+
+def assert_rods_item(
+    path: PurePath | str,
+    inherit: bool | None = None,
+    acl: list[AC] | None = None,
+    metadata: list[AVU] | None = None,
+    attributes: list[str] | None = None,
+) -> None:
+    rods_item = make_rods_item(path)
+
+    if inherit:
+        assert is_inheritance_enabled(rods_item) == inherit
+
+    if acl:
+        assert rods_item.acl() == acl
+
+    if metadata:
+        assert rods_item.metadata() == metadata
+
+    if attributes:
+        assert [x.attribute for x in rods_item.metadata()] == attributes
