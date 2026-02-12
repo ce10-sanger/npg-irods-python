@@ -28,6 +28,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import PurePath
+import shutil
 from typing import Any, Generator
 
 import pytest
@@ -436,6 +437,16 @@ def challenging_paths_irods(tmp_path):
         yield expt_root
     finally:
         remove_rods_path(rods_path)
+
+
+@pytest.fixture(scope="function")
+def ultima_run_dir(tmp_path):
+    """
+    A fixture providing Ultima run directory.
+    """
+    src = tmp_path / "minimal"
+    shutil.copytree("./tests/data/ultima/minimal", src)
+    yield src
 
 
 @pytest.fixture(scope="function")

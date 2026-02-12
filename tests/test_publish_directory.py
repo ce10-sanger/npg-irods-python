@@ -15,7 +15,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import json
-import shutil
 from pathlib import PurePath
 from unittest.mock import MagicMock, patch
 
@@ -75,14 +74,13 @@ class TestPublishDirectory:
     @m.it("Should be compatible with npg_publish_tree.pl")
     def test_npg_publish_tree_compatibility_ultima(
         self,
+        ultima_run_dir,
         tmp_path,
         public_unmanaged_inheritance_enabled_collection: PurePath,
         monkeypatch: MonkeyPatch,
     ):
         # Arrange
-        src = tmp_path / "minimal"
-        shutil.copytree("./tests/data/ultima/minimal", src)
-        # empty_collection stands in for $ZONE/ultimagen/runs
+        # public_unmanaged_inheritance_enabled_collection stands in for $ZONE/ultimagen/runs
         # SOP: Destination collection doesn't exist
         dest = (
             public_unmanaged_inheritance_enabled_collection / "run_id_prefix" / "run_id"
@@ -96,13 +94,13 @@ class TestPublishDirectory:
         root_metadata = tmp_path / "root_metadata.json"
         root_metadata.write_text(json.dumps([{"attribute": "a1", "value": "v1"}]))
         root_args = [
-            str(src),
+            str(ultima_run_dir),
             str(dest),
             "--fill",
             "--group",
             "public",
             "--exclude",
-            f"{src}/000001-",
+            f"{ultima_run_dir}/000001-",
             "--exclude",
             ".md5",
             "--metadata-file",
@@ -118,7 +116,7 @@ class TestPublishDirectory:
             )
         )
         sample_dir_args = [
-            str(src / "000001-a"),
+            str(ultima_run_dir / "000001-a"),
             str(dest / "000001-a"),
             "--fill",
             "--group",
@@ -131,7 +129,11 @@ class TestPublishDirectory:
         self._main(sample_dir_args)
 
         # Private
-        private_dir_args = [str(src / "000001-d"), str(dest / "000001-d"), "--fill"]
+        private_dir_args = [
+            str(ultima_run_dir / "000001-d"),
+            str(dest / "000001-d"),
+            "--fill",
+        ]
         self._main(private_dir_args)
 
         # Repeated publish: No changes
@@ -140,8 +142,8 @@ class TestPublishDirectory:
         self._main(private_dir_args)
 
         # Repeated publish: New file
-        (src / "c.txt").write_text("new")
-        c_txt_original_md5 = get_md5(src / "c.txt")
+        (ultima_run_dir / "c.txt").write_text("new")
+        c_txt_original_md5 = get_md5(ultima_run_dir / "c.txt")
         self._main(root_args)
         created_values = [
             x
@@ -152,8 +154,8 @@ class TestPublishDirectory:
         c_txt_original_dcterms_created = created_values[0]
 
         # Repeated publish: Modified file
-        (src / "c.txt").write_text("modified")
-        c_txt_modified_md5 = get_md5(src / "c.txt")
+        (ultima_run_dir / "c.txt").write_text("modified")
+        c_txt_modified_md5 = get_md5(ultima_run_dir / "c.txt")
         self._main(root_args)
         created_values = [
             x
