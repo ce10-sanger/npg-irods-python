@@ -115,9 +115,10 @@ class TestPublishDirectory:
                 [{"attribute": "a2", "value": "v2"}, {"attribute": "a3", "value": "v3"}]
             )
         )
+        sample_dir = "000001-a"
         sample_dir_args = [
-            str(ultima_run_dir / "000001-a"),
-            str(dest / "000001-a"),
+            str(ultima_run_dir / sample_dir),
+            str(dest / sample_dir),
             "--fill",
             "--group",
             "ss_1000#testZone",
@@ -129,9 +130,10 @@ class TestPublishDirectory:
         self._main(sample_dir_args)
 
         # Private
+        private_dir = "000001-d"
         private_dir_args = [
-            str(ultima_run_dir / "000001-d"),
-            str(dest / "000001-d"),
+            str(ultima_run_dir / private_dir),
+            str(dest / private_dir),
             "--fill",
         ]
         self._main(private_dir_args)
@@ -194,13 +196,13 @@ class TestPublishDirectory:
         )
 
         assert Collection(dest).contents(recurse=True) == [
-            Collection(dest / "000001-a"),
-            Collection(dest / "000001-d"),
+            Collection(dest / sample_dir),
+            Collection(dest / private_dir),
             DataObject(dest / "000001_a.txt"),
             DataObject(dest / "b.txt"),
             DataObject(dest / "c.txt"),
-            DataObject(dest / "000001-a" / "000002-c.txt"),
-            DataObject(dest / "000001-d" / "000001-d.txt"),
+            DataObject(dest / sample_dir / "000002-c.txt"),
+            DataObject(dest / private_dir / "000001-d.txt"),
         ]
 
         assert_rods_item(
@@ -255,7 +257,7 @@ class TestPublishDirectory:
         ]
 
         assert_rods_item(
-            dest / "000001-a",
+            dest / sample_dir,
             inherit=True,
             acl=[
                 ADMIN_AC,
@@ -265,7 +267,7 @@ class TestPublishDirectory:
         )
         assert [
             x
-            for x in Collection(dest / "000001-a").metadata()
+            for x in Collection(dest / sample_dir).metadata()
             if x.attribute != "a3_history"
         ] == [
             AVU("a2", "v2"),  # Earlier metadata preserved
@@ -273,12 +275,12 @@ class TestPublishDirectory:
             AVU("a4", "v4"),
         ]
         assert history_in_meta(
-            AVU.history(AVU("a3", "v3")), Collection(dest / "000001-a").metadata()
+            AVU.history(AVU("a3", "v3")), Collection(dest / sample_dir).metadata()
         )
-        assert len(Collection(dest / "000001-a").metadata()) == 4
+        assert len(Collection(dest / sample_dir).metadata()) == 4
 
         assert_rods_item(
-            dest / "000001-a" / "000002-c.txt",
+            dest / sample_dir / "000002-c.txt",
             acl=[
                 ADMIN_AC,
                 STUDY2_AC,
@@ -293,7 +295,7 @@ class TestPublishDirectory:
         )
 
         assert_rods_item(
-            dest / "000001-d",
+            dest / private_dir,
             inherit=True,
             acl=[
                 ADMIN_AC,
@@ -301,7 +303,7 @@ class TestPublishDirectory:
             ],
         )
         assert_rods_item(
-            dest / "000001-d" / "000001-d.txt",
+            dest / private_dir / "000001-d.txt",
             acl=[
                 ADMIN_AC,
                 UNMANAGED_AC,
@@ -335,12 +337,11 @@ def assert_rods_item(
     if attributes:
         assert [x.attribute for x in rods_item.metadata()] == attributes
 
+
 def get_created_metadata(path: PurePath | str) -> str:
     rods_item = make_rods_item(path)
     dcterms_created = [
-        x
-        for x in rods_item.metadata()
-        if x.attribute == "dcterms:created"
+        x for x in rods_item.metadata() if x.attribute == "dcterms:created"
     ]
     assert len(dcterms_created) == 1
     return dcterms_created[0].value
