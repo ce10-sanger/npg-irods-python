@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright © 2022, 2023, 2024, 2025 Genome Research Ltd. All rights
+# Copyright © 2022, 2023, 2024, 2025, 2026 Genome Research Ltd. All rights
 # reserved.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,6 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # @author Keith James <kdj@sanger.ac.uk>
+# @author Calum Eadie <ce10@sanger.ac.uk>
 
 
 """This module contains data management utility functions for working with iRODS data
@@ -29,6 +30,7 @@ import re
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from hashlib import file_digest
 from importlib import resources
 from pathlib import Path, PurePath
 
@@ -1255,3 +1257,24 @@ def read_md5_file(path: Path) -> str:
         if len(md5) != 32:
             raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
         return md5
+
+def read_md5sums_file(path: Path) -> dict[Path, str]:
+    md5sums = {}
+    with path.open() as f:
+        for line in f:
+            line = line.strip()
+            md5, path = line.split("  ", 1)
+            if len(md5) != 32:
+                raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
+            md5sums[path] = md5
+    return md5sums
+
+def checksum(input_path: Path, output_path: Path):
+    # TODO: Skip already calculated
+    with output_path.open("w") as output_file:
+        for path in sorted(input_path.rglob("*")):
+            if path.is_file():
+                digest = file_digest(path, "md5").hexdigest()
+                output_file.write(f"{digest} {path.as_posix()}\n")
+    # TODO: Sort file afterwards?
+

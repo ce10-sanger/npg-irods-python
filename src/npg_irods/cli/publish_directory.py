@@ -31,7 +31,7 @@ from npg_irods import add_appinfo_structlog_processor
 from npg_irods.common import infer_zone
 from npg_irods.functions import make_path_filter
 from npg_irods.publish import publish_directory
-from npg_irods.utilities import read_md5_file
+from npg_irods.utilities import read_md5_file, read_md5sums_file
 
 description = """
 A utility to (recursively) publish a local directory to iRODS, retaining the directory
@@ -131,7 +131,8 @@ parser.add_argument(
     type=argparse.FileType("r", encoding="UTF-8"),
     default=None,
 )
-parser.add_argument(
+checksums_group = parser.add_mutually_exclusive_group(required=False)
+checksums_group.add_argument(
     "--use-checksum-files",
     help="Expect checksum files to be present alongside the data files with "
     "the same name as the data file but with an additional '.md5' extension"
@@ -141,6 +142,12 @@ parser.add_argument(
     "enabled and a checksum file cannot be read, an error will be raised for "
     "that file. Optional, defaults to false.",
     action="store_true",
+)
+checksums_group.add_argument(
+    "--use-checksums-file",
+    help="TODO",
+    type=argparse.FileType("r", encoding="UTF-8"),
+    default=None
 )
 parser.add_argument(
     "--num-clients",
@@ -155,6 +162,10 @@ def _parse_group(group: str) -> tuple[str, str | None]:
     name, zone = (group.split("#", maxsplit=1) + [None])[:2]
     return name, zone
 
+def make_get_checksum(md5sums_path: Path):
+    md5sums = read_md5sums_file(md5sums_path)
+    # TODO: Error handling
+    return lambda path: md5sums[path.name]
 
 def main():
     args = parser.parse_args()
@@ -240,7 +251,12 @@ def main():
         else None
     )
 
-    checksum_fn = read_md5_file if args.use_checksum_files else None
+    if args.use_checksum_files:
+        checksum_fn = read_md5_file
+    elif args.use_checksums_file:
+        checksum_fn = lambda path: read_md5sums_file()
+    else:
+        checksum_fn = None
 
     num_items, num_processed, num_errors = publish_directory(
         args.directory,
