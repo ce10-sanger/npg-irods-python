@@ -1281,7 +1281,7 @@ def checksum(path: Path, md5sums_path: Path):
     # TODO: Skip already calculated
     with md5sums_path.open("a") as md5sums_file:
         for path in sorted(path.rglob("*")):
-            if path.is_file():
+            if path.is_file() and path.suffix.lower() != ".md5":
                 num_files += 1
 
                 if path in md5sums:
