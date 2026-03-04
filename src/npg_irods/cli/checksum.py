@@ -19,9 +19,10 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 import structlog
-from npg.cli import add_io_arguments, add_logging_arguments
+from npg.cli import add_logging_arguments
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
@@ -34,70 +35,61 @@ TODO
 parser = argparse.ArgumentParser(
     description=description, formatter_class=argparse.RawDescriptionHelpFormatter
 )
-add_io_arguments(parser)
 add_logging_arguments(parser)
+
 parser.add_argument(
-    "--print-pass",
-    help="Print to output those paths that pass the check.",
-    action="store_true",
+    "path",
+    help="Path of directory to recursively checksum.",
+    type=str, # TODO: Path?
 )
+
+# parser.add_argument(
+#     "--output",
+#     help="Output file",
+#     type=argparse.FileType("w", encoding="UTF-8"),
+#     default=sys.stdout,
+# )
+
 parser.add_argument(
-    "--print-fail",
-    help="Print to output those paths that fail the check.",
-    action="store_true",
+    "md5sums_path",
+    help="TODO",
+    type=str, # TODO: Path?
 )
-parser.add_argument(
-    "-c",
-    "--clients",
-    help="Number of baton clients to use. Defaults to 4.",
-    type=int,
-    default=4,
-)
-parser.add_argument(
-    "-t",
-    "--threads",
-    help="Number of threads to use. Defaults to 4.",
-    type=int,
-    default=4,
-)
+
+# TODO
+# parser.add_argument(
+#     "-t",
+#     "--threads",
+#     help="Number of threads to use. Defaults to 4.",
+#     type=int,
+#     default=4,
+# )
+
 parser.add_argument(
     "--version", help="Print the version and exit.", action="version", version=version()
 )
 
-args = parser.parse_args()
-configure_structlog(
-    config_file=args.log_config,
-    debug=args.debug,
-    verbose=args.verbose,
-    colour=args.colour,
-    json=args.log_json,
-)
-add_appinfo_structlog_processor()
-log = structlog.get_logger("main")
-
-
 def main():
-    num_processed, num_passed, num_errors = checksum(
-        args.input,
-        args.output,
-        print_pass=args.print_pass,
-        print_fail=args.print_fail,
-        num_clients=args.clients,
-        num_threads=args.threads,
+    args = parser.parse_args()
+    configure_structlog(
+        config_file=args.log_config,
+        debug=args.debug,
+        verbose=args.verbose,
+        colour=args.colour,
+        json=args.log_json,
+    )
+    add_appinfo_structlog_processor()
+    log = structlog.get_logger("main")
+
+    path = Path(args.path)
+    md5sums_path = Path(args.md5sums_path)
+
+    num_files, num_checksummed = checksum(
+        path,
+        md5sums_path,
     )
 
-    if num_errors:
-        log.error(
-            "Some checks did not pass",
-            num_processed=num_processed,
-            num_passed=num_passed,
-            num_errors=num_errors,
-        )
-        sys.exit(1)
+    log.info("Checksummed path successfully", num_files=num_files, num_checksummed=num_checksummed)
 
-    log.info(
-        "All checks passed",
-        num_processed=num_processed,
-        num_passed=num_passed,
-        num_errors=num_errors,
-    )
+if __name__ == "__main__":
+    main()

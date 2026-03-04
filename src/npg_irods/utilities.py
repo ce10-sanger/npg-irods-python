@@ -1266,15 +1266,33 @@ def read_md5sums_file(path: Path) -> dict[Path, str]:
             md5, path = line.split("  ", 1)
             if len(md5) != 32:
                 raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
-            md5sums[path] = md5
+            md5sums[Path(path)] = md5
     return md5sums
 
-def checksum(input_path: Path, output_path: Path):
+# def checksum(path: Path, writer):
+def checksum(path: Path, md5sums_path: Path):
+    # TODO: Docs
+
+    num_files = 0
+    num_checksummed = 0
+
+    md5sums = read_md5sums_file(md5sums_path) if md5sums_path.exists() else {}
+
     # TODO: Skip already calculated
-    with output_path.open("w") as output_file:
-        for path in sorted(input_path.rglob("*")):
+    with md5sums_path.open("a") as md5sums_file:
+        for path in sorted(path.rglob("*")):
             if path.is_file():
-                digest = file_digest(path, "md5").hexdigest()
-                output_file.write(f"{digest} {path.as_posix()}\n")
+                num_files += 1
+
+                if path in md5sums:
+                   continue
+
+                with open(path, "rb") as f:
+                    digest = file_digest(f, "md5")
+
+                md5sums_file.write(f"{digest.hexdigest()}  {path.absolute()}\n")
+
+                num_checksummed += 1
     # TODO: Sort file afterwards?
 
+    return num_files, num_checksummed
