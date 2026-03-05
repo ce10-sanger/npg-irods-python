@@ -1259,6 +1259,9 @@ def read_md5_file(path: Path) -> str:
         return md5
 
 def read_md5sums_file(path: Path) -> dict[Path, str]:
+    """
+    TODO: Dictionary of absolute paths to MD5 checksums.
+    """
     md5sums = {}
     with path.open() as f:
         for line in f:
@@ -1276,6 +1279,8 @@ def checksum(path: Path, md5sums_path: Path):
     num_files = 0
     num_checksummed = 0
 
+    path = path.resolve()
+
     md5sums = read_md5sums_file(md5sums_path) if md5sums_path.exists() else {}
 
     with md5sums_path.open("a") as md5sums_file:
@@ -1290,7 +1295,7 @@ def checksum(path: Path, md5sums_path: Path):
                 with open(path, "rb") as f:
                     digest = file_digest(f, "md5")
 
-                md5sums_file.write(f"{digest.hexdigest()}  {path.absolute()}\n")
+                md5sums_file.write(f"{digest.hexdigest()}  {path}\n")
 
                 num_checksummed += 1
     # TODO: Sort file afterwards?

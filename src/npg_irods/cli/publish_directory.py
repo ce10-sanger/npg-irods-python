@@ -167,7 +167,7 @@ def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
     md5sums = read_md5sums_file(md5sums_path)
     def get_checksum(path: Path | str) -> str:
         path = Path(path) if isinstance(path, str) else path
-        return md5sums[path]
+        return md5sums[path.resolve()]
     # TODO: Error handling
     return get_checksum
 
