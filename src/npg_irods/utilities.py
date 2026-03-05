@@ -1301,7 +1301,10 @@ def checksum(path: Path, md5sums_path: Path):
                 with open(path, "rb") as f:
                     digest = file_digest(f, "md5")
 
-                md5sums_file.write(f"{digest.hexdigest()}  {path}\n")
+                md5sum = digest.hexdigest()
+                md5sums_file.write(f"{md5sum}  {path}\n")
+
+                log.debug("Calculated checksum.", path=path, md5sum=md5sum)
 
                 num_checksummed += 1
     # TODO: Sort file afterwards?
