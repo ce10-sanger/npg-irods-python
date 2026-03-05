@@ -254,7 +254,7 @@ def main():
     if args.use_checksum_files:
         checksum_fn = read_md5_file
     elif args.use_checksums_file:
-        checksum_fn = lambda path: read_md5sums_file()
+        checksum_fn = lambda path: read_md5sums_file(path)
     else:
         checksum_fn = None
 
