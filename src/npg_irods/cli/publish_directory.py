@@ -145,10 +145,7 @@ checksums_group.add_argument(
     action="store_true",
 )
 checksums_group.add_argument(
-    "--use-checksums-file",
-    help="TODO",
-    type=str, # TODO: Path?
-    default=None
+    "--use-checksums-file", help="TODO", type=str, default=None  # TODO: Path?
 )
 parser.add_argument(
     "--num-clients",
@@ -163,19 +160,26 @@ def _parse_group(group: str) -> tuple[str, str | None]:
     name, zone = (group.split("#", maxsplit=1) + [None])[:2]
     return name, zone
 
+
 def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
     md5sums = read_md5sums_file(md5sums_path)
+    md5sums_modified = md5sums_path.stat().st_mtime
+
     def get_checksum(path: Path | str) -> str:
         path = Path(path) if isinstance(path, str) else path
         path = path.resolve()
         checksum = md5sums.get(path)
         if not checksum:
             raise ValueError(f"No checksum found for {path}")
-        if path.stat().st_mtime > md5sums_path.stat().st_mtime:
-            raise ValueError(f"Checksum for {path} may be out of date, file modified more recently than {md5sums_path}")
+        path_modified = path.stat().st_mtime
+        if path_modified > md5sums_modified:
+            raise ValueError(
+                f"Checksum for {path} may be out of date, file modified ({path_modified}) more recently than {md5sums_path} ({md5sums_modified})"
+            )
         return checksum
-        # TODO: Check for stale checksums?
+
     return get_checksum
+
 
 def main():
     args = parser.parse_args()
@@ -268,7 +272,11 @@ def main():
         try:
             checksum_fn = make_get_checksum(Path(args.use_checksums_file))
         except Exception as e:
-            log.error("Failed to read checksums file", path=args.use_checksums_file, error=str(e))
+            log.error(
+                "Failed to read checksums file",
+                path=args.use_checksums_file,
+                error=str(e),
+            )
             raise e
             # TODO: Review error handling
     else:

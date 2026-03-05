@@ -1258,6 +1258,7 @@ def read_md5_file(path: Path) -> str:
             raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
         return md5
 
+
 def read_md5sums_file(path: Path) -> dict[Path, str]:
     """
     TODO: Dictionary of absolute paths to MD5 checksums.
@@ -1271,6 +1272,7 @@ def read_md5sums_file(path: Path) -> dict[Path, str]:
                 raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
             md5sums[Path(path)] = md5
     return md5sums
+
 
 # def checksum(path: Path, writer):
 def checksum(path: Path, md5sums_path: Path):
@@ -1289,7 +1291,11 @@ def checksum(path: Path, md5sums_path: Path):
                 num_files += 1
 
                 if path in md5sums:
-                    log.debug("Match found in md5sums file. Skipping.", path=path, md5sums_path=md5sums_path)
+                    log.debug(
+                        "Match found in md5sums file. Skipping.",
+                        path=path,
+                        md5sums_path=md5sums_path,
+                    )
                     continue
 
                 with open(path, "rb") as f:

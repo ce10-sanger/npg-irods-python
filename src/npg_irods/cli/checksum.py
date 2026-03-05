@@ -39,7 +39,7 @@ add_logging_arguments(parser)
 parser.add_argument(
     "path",
     help="Path of directory to recursively checksum.",
-    type=str, # TODO: Path?
+    type=str,  # TODO: Path?
 )
 
 # parser.add_argument(
@@ -52,7 +52,7 @@ parser.add_argument(
 parser.add_argument(
     "md5sums_path",
     help="TODO",
-    type=str, # TODO: Path?
+    type=str,  # TODO: Path?
 )
 
 # TODO
@@ -67,6 +67,7 @@ parser.add_argument(
 parser.add_argument(
     "--version", help="Print the version and exit.", action="version", version=version()
 )
+
 
 def main():
     args = parser.parse_args()
@@ -88,7 +89,12 @@ def main():
         md5sums_path,
     )
 
-    log.info("Checksummed path successfully", num_files=num_files, num_checksummed=num_checksummed)
+    log.info(
+        "Checksummed path successfully",
+        num_files=num_files,
+        num_checksummed=num_checksummed,
+    )
+
 
 if __name__ == "__main__":
     main()
