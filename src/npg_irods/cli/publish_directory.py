@@ -171,7 +171,10 @@ def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
         checksum = md5sums.get(path)
         if not checksum:
             raise ValueError(f"No checksum found for {path}")
+        if path.stat().st_mtime > md5sums_path.stat().st_mtime:
+            raise ValueError(f"Checksum for {path} may be out of date, file modified more recently than {md5sums_path}")
         return checksum
+        # TODO: Check for stale checksums?
     return get_checksum
 
 def main():
