@@ -167,8 +167,11 @@ def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
     md5sums = read_md5sums_file(md5sums_path)
     def get_checksum(path: Path | str) -> str:
         path = Path(path) if isinstance(path, str) else path
-        return md5sums[path.resolve()]
-    # TODO: Error handling
+        path = path.resolve()
+        checksum = md5sums.get(path)
+        if not checksum:
+            raise ValueError(f"No checksum found for {path}")
+        return checksum
     return get_checksum
 
 def main():
