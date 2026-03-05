@@ -1278,14 +1278,14 @@ def checksum(path: Path, md5sums_path: Path):
 
     md5sums = read_md5sums_file(md5sums_path) if md5sums_path.exists() else {}
 
-    # TODO: Skip already calculated
     with md5sums_path.open("a") as md5sums_file:
         for path in sorted(path.rglob("*")):
             if path.is_file() and path.suffix.lower() != ".md5":
                 num_files += 1
 
                 if path in md5sums:
-                   continue
+                    log.debug("Match found in md5sums file. Skipping.", path=path, md5sums_path=md5sums_path)
+                    continue
 
                 with open(path, "rb") as f:
                     digest = file_digest(f, "md5")

@@ -18,7 +18,6 @@
 # @author Calum Eadie <ce10@sanger.ac.uk>
 
 import argparse
-import sys
 from pathlib import Path
 
 import structlog

@@ -21,6 +21,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Callable
 
 import structlog
 from npg.cli import add_logging_arguments, integer_in_range
@@ -146,7 +147,7 @@ checksums_group.add_argument(
 checksums_group.add_argument(
     "--use-checksums-file",
     help="TODO",
-    type=argparse.FileType("r", encoding="UTF-8"),
+    type=str, # TODO: Path?
     default=None
 )
 parser.add_argument(
@@ -162,10 +163,13 @@ def _parse_group(group: str) -> tuple[str, str | None]:
     name, zone = (group.split("#", maxsplit=1) + [None])[:2]
     return name, zone
 
-def make_get_checksum(md5sums_path: Path):
+def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
     md5sums = read_md5sums_file(md5sums_path)
+    def get_checksum(path: Path | str) -> str:
+        path = Path(path) if isinstance(path, str) else path
+        return md5sums[path]
     # TODO: Error handling
-    return lambda path: md5sums[path.name]
+    return get_checksum
 
 def main():
     args = parser.parse_args()
@@ -251,10 +255,16 @@ def main():
         else None
     )
 
+    checksum_fn: Callable[[Path | str], str] | None
     if args.use_checksum_files:
         checksum_fn = read_md5_file
     elif args.use_checksums_file:
-        checksum_fn = lambda path: read_md5sums_file(path)
+        try:
+            checksum_fn = make_get_checksum(Path(args.use_checksums_file))
+        except Exception as e:
+            log.error("Failed to read checksums file", path=args.use_checksums_file, error=str(e))
+            raise e
+            # TODO: Review error handling
     else:
         checksum_fn = None
 
