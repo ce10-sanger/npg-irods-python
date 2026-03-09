@@ -1275,7 +1275,7 @@ def read_md5sums_file(path: Path) -> dict[Path, str]:
 
 
 # def checksum(path: Path, writer):
-def checksum(path: Path, md5sums_path: Path):
+def checksum_directory(path: Path, md5sums_path: Path):
     # TODO: Docs
 
     num_files = 0

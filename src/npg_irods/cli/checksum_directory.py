@@ -25,7 +25,7 @@ from npg.cli import add_logging_arguments
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
-from npg_irods.utilities import checksum
+from npg_irods.utilities import checksum_directory
 
 description = """
 TODO
@@ -84,7 +84,7 @@ def main():
     path = Path(args.path)
     md5sums_path = Path(args.md5sums_path)
 
-    num_files, num_checksummed = checksum(
+    num_files, num_checksummed = checksum_directory(
         path,
         md5sums_path,
     )
