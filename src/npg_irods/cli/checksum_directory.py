@@ -37,7 +37,7 @@ parser = argparse.ArgumentParser(
 add_logging_arguments(parser)
 
 parser.add_argument(
-    "path",
+    "directory",
     help="Path of directory to recursively checksum.",
     type=str,  # TODO: Path?
 )
@@ -81,7 +81,7 @@ def main():
     add_appinfo_structlog_processor()
     log = structlog.get_logger("main")
 
-    path = Path(args.path)
+    path = Path(args.directory)
     md5sums_path = Path(args.md5sums_path)
 
     num_files, num_checksummed = checksum_directory(
