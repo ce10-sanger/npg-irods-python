@@ -24,7 +24,19 @@ from npg_irods.utilities import read_md5sums_file, log
 
 
 def checksum_directory(path: Path, md5sums_path: Path):
-    # TODO: Docs
+    """Calculate MD5 checksums for all files in a directory and write to file.
+
+    The output follows GNU coreutils md5sum format. Checksum files (*.md5) are
+    ignored. Files with existing checksums are skipped.
+
+    Args:
+        path (Path): Path to the directory to checksum.
+        md5sums_path (Path): Path to the file to write checksums.
+
+    Returns:
+        A tuple containing the number of files considered and the number of files
+        checksummed (not skipped).
+    """
 
     num_files = 0
     num_checksummed = 0
