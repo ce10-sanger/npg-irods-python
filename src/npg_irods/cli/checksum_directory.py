@@ -25,7 +25,7 @@ from npg.cli import add_logging_arguments
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
-from npg_irods.utilities import checksum_directory
+from npg_irods.checksum import checksum_directory
 
 description = """
 TODO

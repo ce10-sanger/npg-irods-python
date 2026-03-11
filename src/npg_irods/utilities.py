@@ -30,7 +30,6 @@ import re
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from hashlib import file_digest
 from importlib import resources
 from pathlib import Path, PurePath
 
@@ -1272,41 +1271,3 @@ def read_md5sums_file(path: Path) -> dict[Path, str]:
                 raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
             md5sums[Path(path)] = md5
     return md5sums
-
-
-# def checksum(path: Path, writer):
-def checksum_directory(path: Path, md5sums_path: Path):
-    # TODO: Docs
-
-    num_files = 0
-    num_checksummed = 0
-
-    path = path.resolve()
-
-    md5sums = read_md5sums_file(md5sums_path) if md5sums_path.exists() else {}
-
-    with md5sums_path.open("a") as md5sums_file:
-        for path in sorted(path.rglob("*")):
-            if path.is_file() and path.suffix.lower() != ".md5":
-                num_files += 1
-
-                if path in md5sums:
-                    log.debug(
-                        "Match found in md5sums file. Skipping.",
-                        path=path,
-                        md5sums_path=md5sums_path,
-                    )
-                    continue
-
-                with open(path, "rb") as f:
-                    digest = file_digest(f, "md5")
-
-                md5sum = digest.hexdigest()
-                md5sums_file.write(f"{md5sum}  {path}\n")
-
-                log.debug("Calculated checksum.", path=path, md5sum=md5sum)
-
-                num_checksummed += 1
-    # TODO: Sort file afterwards?
-
-    return num_files, num_checksummed
