@@ -1260,9 +1260,18 @@ def read_md5_file(path: Path) -> str:
 
 def read_md5sums_file(path: Path) -> dict[Path, str]:
     """
-    TODO: Dictionary of absolute paths to MD5 checksums.
+    Reads an MD5 checksums file produced by checksum-directory or another tool
+    outputting to GNU coreutils md5sum compatible format. Raises an error if the
+    file does not exist or if a checksum is not 32 characters.
+
+    Args:
+        path: Path to the file to read the MD5 checksums from.
+
+    Returns:
+        Dictionary of absolute paths to MD5 checksums.
     """
     md5sums = {}
+    log.info("Reading MD5 checksums file.", path=path)
     with path.open() as f:
         for line in f:
             line = line.strip()

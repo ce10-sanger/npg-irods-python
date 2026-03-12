@@ -39,9 +39,12 @@ class TestChecksum:
         # Assert
         assert num_files == 2
         assert num_checksummed == 2
-        assert md5sums_path.read_text() == f"""cac862166e910d51dc16aa0eab7a7a7c  {path}/a.txt
+        assert (
+            md5sums_path.read_text()
+            == f"""cac862166e910d51dc16aa0eab7a7a7c  {path}/a.txt
 92f14d525211301f5ccb1ab6a8884fb3  {path}/sub/b.txt
 """
+        )
 
     @m.context("When checksumming a directory with existing checksum file")
     @m.it("Create checksum file")
@@ -49,8 +52,10 @@ class TestChecksum:
         # Arrange
         path = Path("./tests/data/simple/collection").absolute()
         md5sums_path = tmp_path / "collection.md5"
-        md5sums_path.write_text(f"""cac862166e910d51dc16aa0eab7a7a7c  {path}/a.txt
-""")
+        md5sums_path.write_text(
+            f"""cac862166e910d51dc16aa0eab7a7a7c  {path}/a.txt
+"""
+        )
 
         # Act
         num_files, num_checksummed = checksum_directory(path, md5sums_path)
@@ -58,6 +63,9 @@ class TestChecksum:
         # Assert
         assert num_files == 2
         assert num_checksummed == 1
-        assert md5sums_path.read_text() == f"""cac862166e910d51dc16aa0eab7a7a7c  {path}/a.txt
+        assert (
+            md5sums_path.read_text()
+            == f"""cac862166e910d51dc16aa0eab7a7a7c  {path}/a.txt
 92f14d525211301f5ccb1ab6a8884fb3  {path}/sub/b.txt
 """
+        )

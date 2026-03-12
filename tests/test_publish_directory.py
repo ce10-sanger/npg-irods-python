@@ -67,22 +67,15 @@ class TestPublishDirectory:
     def test_npg_publish_tree_compatibility_ultima(
         self,
         tmp_path,
+        ultima_run,
         public_unmanaged_inheritance_enabled_collection: PurePath,
         monkeypatch: MonkeyPatch,
     ):
         # Arrange
-        src = Path("./tests/data/ultima/minimal").absolute()
+        run_dir, checksums_path = ultima_run
         # SOP: Destination collection doesn't exist
         dest = (
             public_unmanaged_inheritance_enabled_collection / "run_id_prefix" / "run_id"
-        )
-        checksums_path = tmp_path / "minimal.md5"
-        checksums_path.write_text(
-            f"""ac06fd24fc0edc84761c799c975d73c3  {src}/000001-a/000002-c.txt
-f8c316034eaf9cd99e7346afa5e4a8e3  {src}/000001-d/000001-d.txt
-6e785a5236e0b5480025469d312b2aeb  {src}/000001_a.txt
-2b1c6c7095b550e86230c4996d1595e4  {src}/b.txt
-"""
         )
         # SOP: Perform wr jobs from /tmp
         monkeypatch.chdir(tmp_path)
@@ -94,7 +87,7 @@ f8c316034eaf9cd99e7346afa5e4a8e3  {src}/000001-d/000001-d.txt
         root_metadata.write_text(json.dumps([{"attribute": "a1", "value": "v1"}]))
         self._main(
             [
-                str(src),
+                str(run_dir),
                 str(dest),
                 "--fill",
                 "--use-checksums-file",
@@ -102,7 +95,7 @@ f8c316034eaf9cd99e7346afa5e4a8e3  {src}/000001-d/000001-d.txt
                 "--group",
                 "public",
                 "--exclude",
-                f"{src}/000001-",
+                f"{run_dir}/000001-",
                 "--exclude",
                 ".md5",
                 "--metadata-file",
@@ -115,7 +108,7 @@ f8c316034eaf9cd99e7346afa5e4a8e3  {src}/000001-d/000001-d.txt
         sample_metadata.write_text(json.dumps([{"attribute": "a2", "value": "v2"}]))
         self._main(
             [
-                str(src / "000001-a"),
+                str(run_dir / "000001-a"),
                 str(dest / "000001-a"),
                 "--fill",
                 "--use-checksums-file",
@@ -132,7 +125,7 @@ f8c316034eaf9cd99e7346afa5e4a8e3  {src}/000001-d/000001-d.txt
         # Private
         self._main(
             [
-                str(src / "000001-d"),
+                str(run_dir / "000001-d"),
                 str(dest / "000001-d"),
                 "--fill",
                 "--use-checksums-file",
