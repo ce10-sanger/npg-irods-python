@@ -28,7 +28,10 @@ from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.checksum import checksum_directory
 
 description = """
-TODO
+A utility to calculate MD5 checksums for all files in a directory.
+
+The output follows GNU coreutils md5sum format. Checksum files (*.md5) are
+ignored. Files with existing checksums are skipped.
 """
 
 parser = argparse.ArgumentParser(
@@ -38,31 +41,15 @@ add_logging_arguments(parser)
 
 parser.add_argument(
     "directory",
-    help="Path of directory to recursively checksum.",
-    type=str,  # TODO: Path?
+    help="The directory to checksum.",
+    type=str,
 )
-
-# parser.add_argument(
-#     "--output",
-#     help="Output file",
-#     type=argparse.FileType("w", encoding="UTF-8"),
-#     default=sys.stdout,
-# )
 
 parser.add_argument(
     "md5sums_path",
-    help="TODO",
-    type=str,  # TODO: Path?
+    help="The file to write checksums to.",
+    type=str,
 )
-
-# TODO
-# parser.add_argument(
-#     "-t",
-#     "--threads",
-#     help="Number of threads to use. Defaults to 4.",
-#     type=int,
-#     default=4,
-# )
 
 parser.add_argument(
     "--version", help="Print the version and exit.", action="version", version=version()

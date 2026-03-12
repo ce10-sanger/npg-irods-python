@@ -30,8 +30,8 @@ def checksum_directory(path: Path, md5sums_path: Path):
     ignored. Files with existing checksums are skipped.
 
     Args:
-        path (Path): Path to the directory to checksum.
-        md5sums_path (Path): Path to the file to write checksums.
+        path (Path): The directory to checksum.
+        md5sums_path (Path): The file to write checksums to.
 
     Returns:
         A tuple containing the number of files considered and the number of files

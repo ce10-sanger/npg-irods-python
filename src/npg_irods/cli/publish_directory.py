@@ -145,7 +145,14 @@ checksums_group.add_argument(
     action="store_true",
 )
 checksums_group.add_argument(
-    "--use-checksums-file", help="TODO", type=str, default=None  # TODO: Path?
+    "--use-checksums-file",
+    help="Expect checksums to be present in a checksums file at path specified "
+    "following GNU coreutils md5sum format. This avoids having to calculate the "
+    "checksums during the publish process. If this option is enabled and a "
+    "checksum is missing or stale, an error will be raised for that file. "
+    "Optional, defaults to none.",
+    type=str,
+    default=None,
 )
 parser.add_argument(
     "--num-clients",
@@ -278,7 +285,6 @@ def main():
                 error=str(e),
             )
             raise e
-            # TODO: Review error handling
     else:
         checksum_fn = None
 
