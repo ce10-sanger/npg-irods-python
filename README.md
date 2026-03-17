@@ -69,6 +69,29 @@ To pre-build the image, you can run:
 
     docker compose build
 
+### Checking prose
+
+To check comments, docstrings and `pytest-it` text for spelling and grammar, install
+the local tooling:
+
+```shell
+python -m pip install codespell language-tool-python
+```
+
+Then run:
+
+```shell
+./pre-commit.sh
+```
+
+The script runs `codespell` on the usual source and documentation paths, then extracts
+Python comments, docstrings and `pytest-it` strings and checks that prose with
+LanguageTool. You can also pass narrower paths, for example:
+
+```shell
+./pre-commit.sh src tests/test_functions.py
+```
+
 ## Creating a release
 
 Releases are created automatically by GitHub Actions when a new tag is pushed to the
