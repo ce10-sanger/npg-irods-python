@@ -16,11 +16,26 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # @author Calum Eadie <ce10@sanger.ac.uk>
-
-from hashlib import file_digest
+import hashlib
 from pathlib import Path
 
 from npg_irods.utilities import read_md5sums_file, log
+
+
+def _calculate_file_checksum(path: Path | str) -> str:
+    """Calculate the MD5 checksum of a local file.
+
+    Args:
+        path: A local file path.
+
+    Returns: The checksum of the file.
+    """
+    h = hashlib.md5()
+    chunk_size = 2**20  # 1MB
+    with open(path, "rb") as f:
+        while chunk := f.read(chunk_size):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def checksum_directory(path: Path, md5sums_path: Path):
@@ -45,7 +60,7 @@ def checksum_directory(path: Path, md5sums_path: Path):
 
     md5sums = read_md5sums_file(md5sums_path) if md5sums_path.exists() else {}
 
-    with md5sums_path.open("a") as md5sums_file:
+    with md5sums_path.open("a", buffering=1) as md5sums_file:
         for path in sorted(path.rglob("*")):
             if path.is_file() and path.suffix.lower() != ".md5":
                 num_files += 1
@@ -58,10 +73,7 @@ def checksum_directory(path: Path, md5sums_path: Path):
                     )
                     continue
 
-                with open(path, "rb") as f:
-                    digest = file_digest(f, "md5")
-
-                md5sum = digest.hexdigest()
+                md5sum = _calculate_file_checksum(path)
                 md5sums_file.write(f"{md5sum}  {path}\n")
 
                 log.debug("Calculated checksum.", path=path, md5sum=md5sum)
