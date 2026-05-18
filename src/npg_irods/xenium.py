@@ -18,6 +18,7 @@
 
 import json
 from pathlib import Path, PurePath
+from typing import Callable
 
 from partisan.irods import AVU, Collection
 from structlog import get_logger
@@ -26,7 +27,8 @@ from npg_irods.common import PlatformNamespace
 from npg_irods.exception import PublishingError
 from npg_irods.metadata.xenium import EXPERIMENT_FILENAME, Instrument
 from npg_irods.publish import publish_directory
-from npg_irods.utilities import sanitise_path
+from npg_irods.utilities import sanitise_path, get_md5sums_path, \
+    make_get_checksum
 
 log = get_logger(__name__)
 
@@ -72,9 +74,9 @@ def make_xenium_metadata(result_dir: Path) -> list[AVU]:
     ]
 
 
-def publish_result_dirs(
-    reader, writer, remote_root: PurePath, print_success=True, print_fail=False
-):
+def publish_result_dirs(reader, writer, remote_root: PurePath,
+                        print_success=True, print_fail=False,
+                        use_checksums_directory=None):
     """Read local Xenium result directory paths from a reader and publish their contents
     to iRODS, printing the results to a writer.
 
@@ -93,6 +95,7 @@ def publish_result_dirs(
             to True.
         print_fail: Print the paths of directories that failed to publish. Defaults
             to False.
+        use_checksums_directory: TODO
 
     Returns:
         A tuple of the number of directories processed, the number successfully
@@ -106,7 +109,7 @@ def publish_result_dirs(
 
         num_dirs += 1
         try:
-            publish_result_dir(p, remote_root)
+            publish_result_dir(p, remote_root, use_checksums_directory)
 
             num_published += 1
 
@@ -124,7 +127,9 @@ def publish_result_dirs(
 
 
 def publish_result_dir(
-    result_dir: Path, remote_root: PurePath, tries: int = 3
+    result_dir: Path, remote_root: PurePath,
+        tries: int = 3,
+        use_checksums_directory=None
 ) -> Collection:
     """Publish one Xenium results directory to iRODS.
 
@@ -133,6 +138,7 @@ def publish_result_dir(
         remote_root: iRODS path to the root of the Xenium results collection. This
             collection must exist.
         tries: Number of times to retry publishing if it fails.
+        use_checksums_directory: TODO
 
     Returns:
         The iRODS collection containing the published results.
@@ -152,6 +158,13 @@ def publish_result_dir(
         metadata=avus,
     )
 
+    checksum_fn: Callable[[Path | str], str] | None
+    if use_checksums_directory:
+        md5sums_path = get_md5sums_path(use_checksums_directory, src)
+        checksum_fn = make_get_checksum(md5sums_path)
+    else:
+        checksum_fn = None
+
     def filter_item(item: Path) -> bool:
         """Filter out symlinks and non-files/directories."""
         return item.is_symlink() or not (item.is_file() or item.is_dir())
@@ -160,6 +173,7 @@ def publish_result_dir(
         src,
         dest,
         avus=avus,
+        local_checksum=checksum_fn,
         filter_fn=filter_item,
         force=True,
         fill=True,

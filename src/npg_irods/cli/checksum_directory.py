@@ -26,6 +26,7 @@ from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.checksum import checksum_directory
+from npg_irods.utilities import get_md5sums_path
 
 description = """
 A utility to calculate MD5 checksums for all files in a directory.
@@ -51,10 +52,18 @@ def main():
         type=str,
     )
 
-    parser.add_argument(
+    checksums_file_group = parser.add_mutually_exclusive_group(required=True)
+
+    checksums_file_group.add_argument(
         "--md5sums-path",
         help="The file to write checksums to.",
         type=str,
+    )
+
+    checksums_file_group.add_argument("--checksums-directory",
+        help="The directory to write checksums to."
+        "The path of file to write checksums to is derived from path of"
+        "directory to checksum.",
     )
 
     parser.add_argument(
@@ -75,7 +84,13 @@ def main():
     add_appinfo_structlog_processor()
 
     path = Path(args.directory)
-    md5sums_path = Path(args.md5sums_path)
+
+    if args.md5sums_path:
+        md5sums_path = Path(args.md5sums_path)
+    elif args.checksums_directory:
+        md5sums_path = get_md5sums_path(args.checksums_directory, path)
+    else:
+        raise ValueError("Expected an md5sums path or a checksums directory to be specified.")
 
     num_files, num_checksummed = checksum_directory(
         path,

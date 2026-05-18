@@ -70,6 +70,16 @@ def main():
         action="store_true",
     )
     parser.add_argument(
+        "--use-checksums-directory",
+        help="Expect checksums to be present in a checksums file within specified"
+        "checksums directory following GNU coreutils md5sum format. "
+        "This avoids having to calculate the checksums during the publish process. "
+        "If this option is enabled and a checksum is missing or stale, an error "
+        "will be raised for that file. "
+        "Optional, defaults to none.",
+        type=str
+    )
+    parser.add_argument(
         "--version",
         help="Print the version and exit.",
         action="version",
@@ -98,6 +108,7 @@ def main():
                 remote_root=args.collection,
                 print_success=args.print_success,
                 print_fail=args.print_fail,
+                use_checksums_directory=args.use_checksums_directory
             )
 
             if num_failed:
