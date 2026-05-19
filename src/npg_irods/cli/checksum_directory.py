@@ -29,6 +29,8 @@ from npg_irods.checksum import checksum_directory
 from npg_irods.utilities import get_md5sums_path
 
 description = """
+BOB
+
 A utility to calculate MD5 checksums for all files in a directory.
 
 The output follows GNU coreutils md5sum format. Checksum files (*.md5) are
@@ -60,7 +62,8 @@ def main():
         type=str,
     )
 
-    checksums_file_group.add_argument("--checksums-directory",
+    checksums_file_group.add_argument(
+        "--checksums-directory",
         help="The directory to write checksums to."
         "The path of file to write checksums to is derived from path of"
         "directory to checksum.",
@@ -88,9 +91,13 @@ def main():
     if args.md5sums_path:
         md5sums_path = Path(args.md5sums_path)
     elif args.checksums_directory:
-        md5sums_path = get_md5sums_path(args.checksums_directory, path)
+        md5sums_path = get_md5sums_path(Path(args.checksums_directory), path)
     else:
-        raise ValueError("Expected an md5sums path or a checksums directory to be specified.")
+        raise ValueError(
+            "Expected an md5sums path or a checksums directory to be specified."
+        )
+
+    logger().info("Checksumming directory", directory=path, md5sums=md5sums_path)
 
     num_files, num_checksummed = checksum_directory(
         path,
@@ -98,7 +105,7 @@ def main():
     )
 
     logger().info(
-        "Checksummed path successfully",
+        "Checksummed directory successfully",
         num_files=num_files,
         num_checksummed=num_checksummed,
     )

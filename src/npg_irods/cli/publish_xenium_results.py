@@ -77,7 +77,7 @@ def main():
         "If this option is enabled and a checksum is missing or stale, an error "
         "will be raised for that file. "
         "Optional, defaults to none.",
-        type=str
+        type=str,
     )
     parser.add_argument(
         "--version",
@@ -108,7 +108,7 @@ def main():
                 remote_root=args.collection,
                 print_success=args.print_success,
                 print_fail=args.print_fail,
-                use_checksums_directory=args.use_checksums_directory
+                use_checksums_directory=args.use_checksums_directory,
             )
 
             if num_failed:

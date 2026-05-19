@@ -1259,6 +1259,7 @@ def read_md5_file(path: Path) -> str:
             raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
         return md5
 
+
 def get_md5sums_path(checksums_directory: Path, folder: Path) -> Path:
     """
     TODO: incl only one implementation
@@ -1272,8 +1273,7 @@ def get_md5sums_path(checksums_directory: Path, folder: Path) -> Path:
 
     # TODO: Consider sharding?
 
-    return (checksums_directory.resolve() / folder.relative_to(
-        "/")).with_suffix(".md5")
+    return (checksums_directory.resolve() / folder.relative_to("/")).with_suffix(".md5")
 
 
 def read_md5sums_file(path: Path) -> dict[Path, str]:
@@ -1299,6 +1299,7 @@ def read_md5sums_file(path: Path) -> dict[Path, str]:
             md5sums[Path(path)] = md5
     return md5sums
 
+
 def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
     md5sums = read_md5sums_file(md5sums_path)
     md5sums_modified = md5sums_path.stat().st_mtime
@@ -1317,6 +1318,7 @@ def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
         return checksum
 
     return get_checksum
+
 
 def sanitise_path(path: str | None) -> str | None:
     """Sanitise a path string by removing leading and trailing whitespace. This

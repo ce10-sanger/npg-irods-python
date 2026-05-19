@@ -27,8 +27,7 @@ from npg_irods.common import PlatformNamespace
 from npg_irods.exception import PublishingError
 from npg_irods.metadata.xenium import EXPERIMENT_FILENAME, Instrument
 from npg_irods.publish import publish_directory
-from npg_irods.utilities import sanitise_path, get_md5sums_path, \
-    make_get_checksum
+from npg_irods.utilities import sanitise_path, get_md5sums_path, make_get_checksum
 
 log = get_logger(__name__)
 
@@ -74,9 +73,14 @@ def make_xenium_metadata(result_dir: Path) -> list[AVU]:
     ]
 
 
-def publish_result_dirs(reader, writer, remote_root: PurePath,
-                        print_success=True, print_fail=False,
-                        use_checksums_directory=None):
+def publish_result_dirs(
+    reader,
+    writer,
+    remote_root: PurePath,
+    print_success=True,
+    print_fail=False,
+    use_checksums_directory=None,
+):
     """Read local Xenium result directory paths from a reader and publish their contents
     to iRODS, printing the results to a writer.
 
@@ -127,9 +131,10 @@ def publish_result_dirs(reader, writer, remote_root: PurePath,
 
 
 def publish_result_dir(
-    result_dir: Path, remote_root: PurePath,
-        tries: int = 3,
-        use_checksums_directory=None
+    result_dir: Path,
+    remote_root: PurePath,
+    tries: int = 3,
+    use_checksums_directory=None,
 ) -> Collection:
     """Publish one Xenium results directory to iRODS.
 
