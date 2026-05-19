@@ -79,7 +79,7 @@ def publish_result_dirs(
     remote_root: PurePath,
     print_success=True,
     print_fail=False,
-    use_checksums_directory=None,
+    use_checksums_directory: Path | None = None,
 ):
     """Read local Xenium result directory paths from a reader and publish their contents
     to iRODS, printing the results to a writer.
@@ -156,19 +156,19 @@ def publish_result_dir(
     dest = remote_root / _irods_partial_path(src)
     avus = make_xenium_metadata(src)
 
+    md5sums_path = None
+    checksum_fn: Callable[[Path | str], str] | None = None
+    if use_checksums_directory:
+        md5sums_path = get_md5sums_path(use_checksums_directory, src)
+        checksum_fn = make_get_checksum(md5sums_path)
+
     log.info(
         "Publishing Xenium result",
         src=src.as_posix(),
         dest=dest.as_posix(),
         metadata=avus,
+        md5sums_path=md5sums_path,
     )
-
-    checksum_fn: Callable[[Path | str], str] | None
-    if use_checksums_directory:
-        md5sums_path = get_md5sums_path(use_checksums_directory, src)
-        checksum_fn = make_get_checksum(md5sums_path)
-    else:
-        checksum_fn = None
 
     def filter_item(item: Path) -> bool:
         """Filter out symlinks and non-files/directories."""

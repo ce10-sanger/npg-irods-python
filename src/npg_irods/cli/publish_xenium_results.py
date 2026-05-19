@@ -17,6 +17,7 @@
 #
 import argparse
 import sys
+from pathlib import Path
 
 import structlog
 from npg.cli import add_io_arguments, add_logging_arguments, open_input, open_output
@@ -98,6 +99,7 @@ def main():
 
     input_path = sanitise_path(args.input)
     output_path = sanitise_path(args.output)
+    checksums_directory = Path(args.use_checksums_directory) if args.use_checksums_directory else None
 
     with open_input(input_path, encoding="utf-8") as reader:
         with open_output(output_path, encoding="utf-8") as writer:
@@ -108,7 +110,7 @@ def main():
                 remote_root=args.collection,
                 print_success=args.print_success,
                 print_fail=args.print_fail,
-                use_checksums_directory=args.use_checksums_directory,
+                use_checksums_directory=checksums_directory,
             )
 
             if num_failed:
