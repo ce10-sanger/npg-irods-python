@@ -62,6 +62,12 @@ def checksum_directory(path: Path, md5sums_path: Path):
                     )
                     continue
 
+                if path.is_symlink():
+                    # We've encountered symbolic links to device files e.g. /proc/kcore
+                    # Filter out
+                    log.warn("Path is a symbolic link. Skipping.", path=path)
+                    continue
+
                 with open(path, "rb") as f:
                     digest = file_digest(f, "md5")
 
