@@ -72,7 +72,7 @@ def main():
     )
     parser.add_argument(
         "--use-checksums-directory",
-        help="Expect checksums to be present in a checksums file within specified"
+        help="Expect checksums to be present in a checksums file within specified "
         "checksums directory following GNU coreutils md5sum format. "
         "This avoids having to calculate the checksums during the publish process. "
         "If this option is enabled and a checksum is missing or stale, an error "

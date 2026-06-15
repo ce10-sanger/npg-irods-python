@@ -113,7 +113,7 @@ def publish_result_dirs(
 
         num_dirs += 1
         try:
-            publish_result_dir(p, remote_root, use_checksums_directory)
+            publish_result_dir(p, remote_root, use_checksums_directory=use_checksums_directory)
 
             num_published += 1
 
