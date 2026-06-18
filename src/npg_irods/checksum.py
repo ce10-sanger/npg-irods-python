@@ -45,8 +45,8 @@ def checksum_directory(path: Path, md5sums_path: Path):
 
     md5sums = read_md5sums_file(md5sums_path) if md5sums_path.exists() else {}
 
-    # TODO: Desirable? Remove creation from other locations?
-    # Downside? Mistake could create large unwanted directory tree
+    # Need to ensure parent directories of checksum file exist in --use-checksum-directory
+    # case because checksum-directory responsible for calculating the path.
     md5sums_path.parent.mkdir(parents=True, exist_ok=True)
 
     with md5sums_path.open("a") as md5sums_file:
