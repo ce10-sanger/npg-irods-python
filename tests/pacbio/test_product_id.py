@@ -55,7 +55,7 @@ class TestIDProductMetadata:
     @m.context("When id_product metadata are present")
     @m.context("When ensure_ function is called without overwrite flag")
     @m.it("Returns True without overwriting the metadata")
-    def test_ensure_metadata_present(self, pacbio_has_id):
+    def test_ensure_metadata_present_without_overwrite(self, pacbio_has_id):
         obj = DataObject(pacbio_has_id)
 
         obj.add_metadata(AVU(SeqConcept.ID_PRODUCT, "abcde12345"))
@@ -68,7 +68,7 @@ class TestIDProductMetadata:
     @m.context("When id_product metadata are present")
     @m.context("When ensure_ function is called with overwrite flag")
     @m.it("Overwrites id_product metadata with the correct value and returns True")
-    def test_ensure_metadata_present(self, pacbio_has_id):
+    def test_ensure_metadata_present_with_overwrite(self, pacbio_has_id):
         obj = DataObject(pacbio_has_id)
 
         obj.add_metadata(AVU(Instrument.RUN_NAME, "RUN-01"))
