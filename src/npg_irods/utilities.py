@@ -1315,7 +1315,12 @@ def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
             raise ValueError(
                 f"Checksum for {path} may be out of date, file modified ({path_modified}) more recently than {md5sums_path} ({md5sums_modified})"
             )
-        log.debug("Read checksum from checksums file", local_checksum=checksum, path=path, md5sums_path=md5sums_path)
+        log.debug(
+            "Read checksum from checksums file",
+            local_checksum=checksum,
+            path=path,
+            md5sums_path=md5sums_path,
+        )
         return checksum
 
     return get_checksum
