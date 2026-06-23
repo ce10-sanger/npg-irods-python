@@ -504,3 +504,20 @@ class TestPublish:
             if isinstance(item, Collection):
                 assert is_inheritance_enabled(item)
             assert item.acl() == [ADMIN_AC, UNMANAGED_AC]
+
+    # TODO
+    def test_publish_symlinks(self, empty_collection_path):
+        # Arrange
+        src = Path("./tests/data/symlinks")
+        dest = empty_collection_path
+
+        # Act
+        num_items, num_processed, num_errors = publish_directory(src, dest)
+
+        # Assert
+        breakpoint()
+        assert num_items == 4
+        assert num_processed == 4
+        assert num_errors == 0
+
+        assert Collection(dest).contents(recurse=True) == []

@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # @author Calum Eadie <ce10@sanger.ac.uk>
-import shutil
+
 from pathlib import Path, PosixPath
 from unittest.mock import patch, MagicMock
 
@@ -119,8 +119,8 @@ class TestChecksum:
         assert num_files == 2
         assert num_checksummed == 2
         assert (
-                md5sums_path.read_text()
-                == f"""cac862166e910d51dc16aa0eab7a7a7c  {actual_path}/a.txt
+            md5sums_path.read_text()
+            == f"""cac862166e910d51dc16aa0eab7a7a7c  {actual_path}/a.txt
 92f14d525211301f5ccb1ab6a8884fb3  {actual_path}/sub/b.txt
 """
         )
@@ -131,20 +131,20 @@ class TestChecksum:
     @m.it("Records resolved paths")
     def test_checksum_directory_inner_directory_sym_link(self, tmp_path):
         # Arrange
-        path = tmp_path / "collection"
-        shutil.copytree("./tests/data/simple/collection", path)
+        path = Path("./tests/data/symlinks/collection").absolute()
         md5sums_path = tmp_path / "collection.md5"
 
         # Act
         num_files, num_checksummed = checksum_directory(path, md5sums_path)
 
         # Assert
-        assert num_files == 2
-        assert num_checksummed == 2
+        assert num_files == 4
+        assert num_checksummed == 4
         assert (
-                md5sums_path.read_text()
-                == f"""cac862166e910d51dc16aa0eab7a7a7c  {path}/a.txt
-TODO  {path}/actual/c.txt
+            md5sums_path.read_text()
+            == f"""cac862166e910d51dc16aa0eab7a7a7c  {path}/a.txt
+92f14d525211301f5ccb1ab6a8884fb3  {path}/inside/b.txt
+a146493229dd8f6170f697fce4bca8bd  {path}/outside/c.txt
 92f14d525211301f5ccb1ab6a8884fb3  {path}/sub/b.txt
         """
         )
