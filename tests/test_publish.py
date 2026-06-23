@@ -505,19 +505,38 @@ class TestPublish:
                 assert is_inheritance_enabled(item)
             assert item.acl() == [ADMIN_AC, UNMANAGED_AC]
 
-    # TODO
+    @m.context("When publishing a directory containing symbolic links")
+    @m.it("Should follow the links")
     def test_publish_symlinks(self, empty_collection_path):
         # Arrange
-        src = Path("./tests/data/symlinks")
+        src = Path("./tests/data/symlinks/collection")
+        outside = Path("./tests/data/symlinks/outside")
         dest = empty_collection_path
 
         # Act
         num_items, num_processed, num_errors = publish_directory(src, dest)
 
         # Assert
-        breakpoint()
-        assert num_items == 4
-        assert num_processed == 4
+        assert num_items == 10
+        assert num_processed == 10
         assert num_errors == 0
+        # TODO: partisan doesn't currently follow symlinks. Should it?
+        # https://github.com/wtsi-npg/partisan/blob/devel/src/partisan/irods.py#L3623
 
-        assert Collection(dest).contents(recurse=True) == []
+        assert Collection(dest).contents(recurse=True) == [
+            Collection(dest / "inside"),
+            Collection(dest / "outside"),
+            Collection(dest / "sub"),
+            DataObject(dest / "a.txt"),
+            DataObject(dest / "inside.txt"),
+            DataObject(dest / "outside.txt"),
+            DataObject(dest / "inside/b.txt"),
+            DataObject(dest / "outside/c.txt"),
+            DataObject(dest / "sub/b.txt"),
+        ]
+        assert (
+            DataObject(dest / "inside.txt").read() == (src / "a.txt").read_text()
+        ), "Should follow link and archive contents of linked file, not the symbolic link"
+        assert (
+            DataObject(dest / "outside.txt").read() == (outside / "c.txt").read_text()
+        ), "Should follow link and archive contents of linked file, not the symbolic link"

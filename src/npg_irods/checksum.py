@@ -42,7 +42,6 @@ def checksum_directory(path: Path, md5sums_path: Path):
     num_checksummed = 0
 
     path = path.resolve()
-    dir_path = path
 
     md5sums = read_md5sums_file(md5sums_path) if md5sums_path.exists() else {}
 
