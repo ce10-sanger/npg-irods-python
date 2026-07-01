@@ -22,6 +22,7 @@
 
 """This module contains data management utility functions for working with iRODS data
 objects and collections."""
+from typing import Callable
 
 import io
 import itertools
@@ -1312,3 +1313,23 @@ def sanitise_path(path: str | None) -> str | None:
             raise ValueError(f"Invalid character in '{path}' at position {i}: '{char}'")
 
     return path
+
+
+def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
+    md5sums = read_md5sums_file(md5sums_path)
+    md5sums_modified = md5sums_path.stat().st_mtime
+
+    def get_checksum(path: Path | str) -> str:
+        path = Path(path) if isinstance(path, str) else path
+        path = path.resolve()
+        checksum = md5sums.get(path)
+        if not checksum:
+            raise ValueError(f"No checksum found for {path}")
+        path_modified = path.stat().st_mtime
+        if path_modified > md5sums_modified:
+            raise ValueError(
+                f"Checksum for {path} may be out of date, file modified ({path_modified}) more recently than {md5sums_path} ({md5sums_modified})"
+            )
+        return checksum
+
+    return get_checksum
