@@ -162,7 +162,7 @@ def publish_result_dir(
 
     def filter_item(item: Path) -> bool:
         """Filter out symlinks and non-files/directories."""
-        return item.is_symlink() or not (item.is_file() or item.is_dir())
+        return item.is_symlink() or not (item.is_file() or item.is_dir()) or item.name == ".DS_Store"
 
     num_items, num_processed, num_errors = publish_directory(
         src,

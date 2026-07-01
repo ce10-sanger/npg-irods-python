@@ -92,6 +92,7 @@ def main():
                         continue
 
                     # TODO: exclude_patterns?
+                    # TODO: Share common
                     if file_path.suffix.lower() != ".md5" or file_path.name == ".DS_Store":
                         continue
 
