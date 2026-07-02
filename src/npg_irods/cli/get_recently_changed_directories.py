@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import operator
 
 import sys
+from npg_irods.system_calls import get_now, get_ctime, get_mtime
 
 from pathlib import Path
 import argparse
@@ -32,7 +33,7 @@ def main():
     )
     parser = add_logging_arguments(parser)
 
-    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs = parser.add_mutually_exclusive_group()
 
     inputs.add_argument(
         "--input",
@@ -74,33 +75,42 @@ def main():
 
     logger().info("Getting recently changed directories")
 
-    begin = datetime.now() - timedelta(days=7)
+    begin = get_now() - timedelta(days=7)
     # Safety against in progress uploads
-    end = datetime.now() - timedelta(hours=1)
+    end = get_now() - timedelta(hours=1)
+
+    logger().debug("Filtering", begin=begin, end=end)
 
     with open_input(input_path, encoding="utf-8") as reader:
         with open_output(output_path, encoding="utf-8") as writer:
+            num_dirs, num_filtered, num_failed = 0, 0, 0
 
             for line in reader:
                 directory_path = Path(sanitise_path(line))
 
+                num_dirs += 1
+
                 mtimes: dict[Path, datetime] = {}
                 ctimes: dict[Path, datetime] = {}
 
-                for file_path in sorted(directory_path.glob("*")):
+                for file_path in directory_path.rglob("*"):
                     if not file_path.is_file():
                         continue
 
                     # TODO: exclude_patterns?
                     # TODO: Share common
-                    if file_path.suffix.lower() != ".md5" or file_path.name == ".DS_Store":
+                    if file_path.suffix.lower() == ".md5" or file_path.name == ".DS_Store":
                         continue
 
-                    mtimes[file_path] = datetime.fromtimestamp(file_path.stat().st_mtime)
-                    ctimes[file_path] = datetime.fromtimestamp(file_path.stat().st_ctime)
+                    mtimes[file_path] = datetime.fromtimestamp(get_mtime(file_path))
+                    ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path))
 
                 # TODO: Expect n files
                 # TODO: mtimes
+
+                if not ctimes:
+                    num_filtered += 1
+                    continue
 
                 earliest_ctime_path, earliest_ctime_date = min(ctimes.items(), key=operator.itemgetter(1))
                 latest_ctime_path, latest_ctime_date = max(ctimes.items(), key=operator.itemgetter(1))
@@ -114,11 +124,14 @@ def main():
                              latest_ctime_path=latest_ctime_path,
                                          latest_ctime_date=latest_ctime_date,
                         )
+                        num_failed += 1
                         continue
 
+                    num_filtered += 1
                     print(directory_path, file=writer)
 
-    logger().info("Got recently changed directories")
+    logger().info("Got recently changed directories", num_dirs=num_dirs, num_filtered=num_filtered, num_failed=num_failed)
+    # TODO: Error handling
 
 if __name__ == "__main__":
     main()
