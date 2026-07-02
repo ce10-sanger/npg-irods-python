@@ -16,6 +16,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # @author Calum Eadie <ce10@sanger.ac.uk>
+from dataclasses import dataclass
+
 from typing import Callable
 
 from abc import abstractmethod
@@ -32,7 +34,7 @@ from npg.cli import add_logging_arguments
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
-from npg_irods.checksum import checksum_directory
+from npg_irods.checksum import checksum_directory, calculate_file_checksum
 
 description = """
 TODO
@@ -150,6 +152,21 @@ def make_diff_item(root: PurePath, item: Path | Collection | DataObject, get_che
         case DataObject():
             return DiffDataObject(root, item)
 
+@dataclass
+class Comparison:
+    left: DiffItem
+    right: DiffItem
+
+@dataclass
+class DiffResult:
+    same: set[PurePath]
+    different: set[PurePath]
+    left_only: set[PurePath]
+    right_only: set[PurePath]
+    items: dict[PurePath, Comparison]
+
+# TODO: Left and right objects?
+
 # TODO: Local or iRODS
 def diff(
     left: Path,
@@ -159,8 +176,8 @@ def diff(
     left_items = [make_diff_item(left, x, get_checksum) for x in left.rglob("*")]
     right_items = [make_diff_item(right.path, x, get_checksum) for x in right.iter_contents(recurse=False)]
 
-    left_items = {x.relative_path: x for x in left_items}
-    right_items = {x.relative_path: x for x in right_items}
+    left_items = {x.relative_path(): x for x in left_items}
+    right_items = {x.relative_path(): x for x in right_items}
 
     left_only = left_items.keys() - right_items.keys()
     right_only = right_items.keys() - left_items.keys()
@@ -175,11 +192,14 @@ def diff(
     print("left_only", left_only)
     print("right_only", right_only)
 
-    return (
+    items = {x: Comparison(left_items.get(x), right_items.get(x)) for x in left_items.keys() | right_items.keys()}
+
+    return DiffResult(
         same,
         different,
         left_only,
         right_only,
+        items
     )
 
 def main():
@@ -244,6 +264,8 @@ def main():
     )
     add_appinfo_structlog_processor()
 
+    logger().warning("Alpha release!")
+
     left = Path(args.left) # TODO: Local or iRODS
     right = Collection(args.right) # TODO: Local or iRODS
 
@@ -262,7 +284,7 @@ def main():
             )
             raise e
     else:
-        raise ValueError()
+        get_checksum = calculate_file_checksum
 
     diff(
         left,

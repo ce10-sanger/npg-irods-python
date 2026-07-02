@@ -62,10 +62,7 @@ def checksum_directory(path: Path, md5sums_path: Path):
                     )
                     continue
 
-                with open(path, "rb") as f:
-                    digest = file_digest(f, "md5")
-
-                md5sum = digest.hexdigest()
+                md5sum = calculate_file_checksum(path)
                 md5sums_file.write(f"{md5sum}  {path}\n")
 
                 log.debug("Calculated checksum.", path=path, md5sum=md5sum)
@@ -73,3 +70,11 @@ def checksum_directory(path: Path, md5sums_path: Path):
                 num_checksummed += 1
 
     return num_files, num_checksummed
+
+
+def calculate_file_checksum(path: Path) -> str:
+    with open(path, "rb") as f:
+        digest = file_digest(f, "md5")
+
+    md5sum = digest.hexdigest()
+    return md5sum
