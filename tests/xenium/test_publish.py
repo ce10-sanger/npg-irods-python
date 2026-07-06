@@ -36,7 +36,7 @@ class TestPublish:
         remote_path = empty_collection_path / "xenium"
 
         Collection(remote_path).create()  # The root collection must exist
-        coll = publish_result_dir(local_path, remote_path)
+        coll = publish_result_dir(0, local_path, remote_path)
 
         instrument = "XETG00000"
         slide_id = "0000000"
