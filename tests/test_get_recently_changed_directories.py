@@ -7,12 +7,13 @@ from unittest.mock import patch
 from npg_irods.cli import get_recently_changed_directories
 
 
-
 class TestGetRecentlyChangedDirectoriesScript:
 
     @patch("get_recently_changed_directories.system_calls.get_ctime")
     @patch("get_recently_changed_directories.system_calls.get_now")
-    def test_get_recently_changed_directories(self, mock_get_now, mock_get_ctime, tmp_path: Path):
+    def test_get_recently_changed_directories(
+        self, mock_get_now, mock_get_ctime, tmp_path: Path
+    ):
         # Arrange
 
         first_monday_3am = datetime(2024, 1, 1, 3, 0, 0)
@@ -43,11 +44,7 @@ class TestGetRecentlyChangedDirectoriesScript:
         empty = tmp_path / "empty"
         empty.mkdir()
 
-        directories = [
-            recent,
-            not_recent,
-            empty
-        ]
+        directories = [recent, not_recent, empty]
 
         input_path = tmp_path / "input.txt"
         input_path.write_text("\n".join(str(x) for x in directories))

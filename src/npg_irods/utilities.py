@@ -22,6 +22,7 @@
 
 """This module contains data management utility functions for working with iRODS data
 objects and collections."""
+
 from typing import Callable
 
 import io

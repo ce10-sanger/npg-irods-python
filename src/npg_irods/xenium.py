@@ -74,7 +74,12 @@ def make_xenium_metadata(result_dir: Path) -> list[AVU]:
 
 
 def publish_result_dirs(
-    reader, writer, remote_root: PurePath, print_success=True, print_fail=False, local_checksum: Callable[[str], bool] | None = None,
+    reader,
+    writer,
+    remote_root: PurePath,
+    print_success=True,
+    print_fail=False,
+    local_checksum: Callable[[str], bool] | None = None,
 ):
     """Read local Xenium result directory paths from a reader and publish their contents
     to iRODS, printing the results to a writer.
@@ -127,7 +132,10 @@ def publish_result_dirs(
 
 
 def publish_result_dir(
-    result_dir: Path, remote_root: PurePath, tries: int = 3, local_checksum: Callable[[str], bool] | None = None
+    result_dir: Path,
+    remote_root: PurePath,
+    tries: int = 3,
+    local_checksum: Callable[[str], bool] | None = None,
 ) -> Collection:
     """Publish one Xenium results directory to iRODS.
 
@@ -162,7 +170,11 @@ def publish_result_dir(
 
     def filter_item(item: Path) -> bool:
         """Filter out symlinks and non-files/directories."""
-        return item.is_symlink() or not (item.is_file() or item.is_dir()) or item.name == ".DS_Store"
+        return (
+            item.is_symlink()
+            or not (item.is_file() or item.is_dir())
+            or item.name == ".DS_Store"
+        )
 
     num_items, num_processed, num_errors = publish_directory(
         src,

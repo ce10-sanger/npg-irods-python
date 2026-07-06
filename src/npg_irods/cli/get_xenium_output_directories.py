@@ -15,8 +15,10 @@ from npg_irods.utilities import sanitise_path
 
 description = """TODO"""
 
+
 def logger():
     return structlog.get_logger(__name__)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -59,13 +61,16 @@ def main():
     logger().info("Getting Xenium output directories")
 
     with open_output(output_path, encoding="utf-8") as writer:
-        for dirpath, dirnames, filenames in root_path.walk(on_error=on_error, follow_symlinks=False):
+        for dirpath, dirnames, filenames in root_path.walk(
+            on_error=on_error, follow_symlinks=False
+        ):
             logger().debug("Considering dirpath", dirpath=dirpath)
 
             if EXPERIMENT_FILENAME in filenames:
                 print(dirpath, file=writer)
 
     logger().info("Got Xenium output directories")
+
 
 if __name__ == "__main__":
     main()

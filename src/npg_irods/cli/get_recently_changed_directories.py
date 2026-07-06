@@ -24,8 +24,10 @@ from npg_irods.utilities import sanitise_path
 
 description = """TODO"""
 
+
 def logger():
     return structlog.get_logger(__name__)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -83,7 +85,7 @@ def main():
 
     with open_input(input_path, encoding="utf-8") as reader:
         with open_output(output_path, encoding="utf-8") as writer:
-            num_dirs, num_filtered, num_failed = 0, 0, 0
+            num_dirs, num_filtered, num_recent, num_failed = 0, 0, 0, 0
 
             for line in reader:
                 directory_path = Path(sanitise_path(line))
@@ -99,7 +101,10 @@ def main():
 
                     # TODO: exclude_patterns?
                     # TODO: Share common
-                    if file_path.suffix.lower() == ".md5" or file_path.name == ".DS_Store":
+                    if (
+                        file_path.suffix.lower() == ".md5"
+                        or file_path.name == ".DS_Store"
+                    ):
                         continue
 
                     mtimes[file_path] = datetime.fromtimestamp(get_mtime(file_path))
@@ -109,29 +114,80 @@ def main():
                 # TODO: mtimes
 
                 if not ctimes:
-                    num_filtered += 1
+                    num_failed += 1
+                    logger().warning(
+                        "No matching files.",
+                        directory=directory_path,
+                    )
                     continue
 
-                earliest_ctime_path, earliest_ctime_date = min(ctimes.items(), key=operator.itemgetter(1))
-                latest_ctime_path, latest_ctime_date = max(ctimes.items(), key=operator.itemgetter(1))
+                earliest_ctime_path, earliest_ctime_date = min(
+                    ctimes.items(), key=operator.itemgetter(1)
+                )
+                latest_ctime_path, latest_ctime_date = max(
+                    ctimes.items(), key=operator.itemgetter(1)
+                )
 
-                if begin < latest_ctime_date < end:
-                    if latest_ctime_date - earliest_ctime_date > timedelta(days=7): # TODO: LATE_CHANGE_DAYS
-                        logger().warning("Unexpected later change to file",
-                             directory=directory_path,
-                             earliest_ctime_path=earliest_ctime_path,
-                                         earliest_ctime_date=earliest_ctime_date,
-                             latest_ctime_path=latest_ctime_path,
-                                         latest_ctime_date=latest_ctime_date,
-                        )
-                        num_failed += 1
-                        continue
-
+                too_old = latest_ctime_date < begin
+                if too_old:
                     num_filtered += 1
-                    print(directory_path, file=writer)
+                    logger().debug(
+                        "Filtered out: too old. Latest ctime before beginning of recent change window.",
+                        directory=directory_path,
+                        begin=begin,
+                        latest_ctime_path=latest_ctime_path,
+                        latest_ctime_date=latest_ctime_date,
+                    )
+                    continue
 
-    logger().info("Got recently changed directories", num_dirs=num_dirs, num_filtered=num_filtered, num_failed=num_failed)
+                too_new = latest_ctime_date > end
+                if too_new:
+                    num_filtered += 1
+                    logger().debug(
+                        "Filtered out: too new (avoid in progress). Latest ctime after end of recent change window.",
+                        directory=directory_path,
+                        begin=begin,
+                        latest_ctime_path=latest_ctime_path,
+                        latest_ctime_date=latest_ctime_date,
+                    )
+                    continue
+
+                change_period = latest_ctime_date - earliest_ctime_date
+                if change_period > timedelta(days=7):  # TODO: LATE_CHANGE_DAYS
+                    logger().warning(
+                        "Unexpected later change to file",
+                        directory=directory_path,
+                        change_period=change_period,
+                        earliest_ctime_path=earliest_ctime_path,
+                        earliest_ctime_date=earliest_ctime_date,
+                        latest_ctime_path=latest_ctime_path,
+                        latest_ctime_date=latest_ctime_date,
+                    )
+                    num_failed += 1
+                    continue
+
+                num_filtered += 1
+                num_recent += 1
+                print(directory_path, file=writer)
+                logger().debug(
+                    "Filtered in.",
+                    directory=directory_path,
+                    begin=begin,
+                    end=end,
+                    change_period=change_period,
+                    latest_ctime_path=latest_ctime_path,
+                    latest_ctime_date=latest_ctime_date,
+                )
+
+    logger().info(
+        "Got recently changed directories",
+        num_dirs=num_dirs,
+        num_filtered=num_filtered,
+        num_recent=num_recent,
+        num_failed=num_failed,
+    )
     # TODO: Error handling
+
 
 if __name__ == "__main__":
     main()
