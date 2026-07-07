@@ -83,10 +83,10 @@ class TestDirectoryDiff:
         rows = diff.diff_directory(tmp_path, "/collection")
 
         assert rows_as_triples(rows) == [
-            ("=", "a.txt", diff.KIND_FILE),
-            ("*", "b.txt", diff.KIND_FILE),
-            ("*", "c.txt", diff.KIND_FILE),
-            ("!", "d.txt", diff.KIND_FILE),
+            (diff.STATUS_SAME, "a.txt", diff.KIND_FILE),
+            (diff.STATUS_DIFFERENT, "b.txt", diff.KIND_FILE),
+            (diff.STATUS_DIFFERENT, "c.txt", diff.KIND_FILE),
+            (diff.STATUS_ERROR, "d.txt", diff.KIND_FILE),
         ]
 
     @m.context("When iRODS data objects are listed")
@@ -120,9 +120,9 @@ class TestDirectoryDiff:
         rows = diff.diff_directory(tmp_path, "/missing")
 
         assert rows_as_tuples(rows) == [
-            (">", "a"),
-            (">", "a/z.txt"),
-            (">", "b.txt"),
+            (diff.STATUS_LOCAL, "a"),
+            (diff.STATUS_LOCAL, "a/z.txt"),
+            (diff.STATUS_LOCAL, "b.txt"),
         ]
 
     @m.context("When streaming starts before recursing")
@@ -146,7 +146,9 @@ class TestDirectoryDiff:
 
         iterator = diff.iter_diff_directory(tmp_path, "/missing")
 
-        assert next(iterator) == diff.DiffRow(">", "a", diff.KIND_DIRECTORY)
+        assert next(iterator) == diff.DiffRow(
+            diff.STATUS_LOCAL, "a", diff.KIND_DIRECTORY
+        )
         mock_local_child_entries.assert_called_once()
 
     @m.context("When one-sided directories are not recursed")
@@ -162,8 +164,8 @@ class TestDirectoryDiff:
         rows = diff.diff_directory(tmp_path, "/missing", no_recurse_missing_dirs=True)
 
         assert rows_as_tuples(rows) == [
-            (">", "a"),
-            (">", "b.txt"),
+            (diff.STATUS_LOCAL, "a"),
+            (diff.STATUS_LOCAL, "b.txt"),
         ]
 
     @m.context("When a type mismatch is pruned")
@@ -197,8 +199,8 @@ class TestDirectoryDiff:
         )
 
         assert rows_as_triples(rows) == [
-            (">", "a", diff.KIND_DIRECTORY),
-            ("<", "a", diff.KIND_FILE),
+            (diff.STATUS_LOCAL, "a", diff.KIND_DIRECTORY),
+            (diff.STATUS_IRODS, "a", diff.KIND_FILE),
         ]
         mock_local_child_entries.assert_called_once()
 
@@ -212,7 +214,7 @@ class TestDirectoryDiff:
 
         rows = diff.diff_directory(tmp_path, "/missing")
 
-        assert rows_as_tuples(rows) == [(">", "a.txt")]
+        assert rows_as_tuples(rows) == [(diff.STATUS_LOCAL, "a.txt")]
 
     @m.context("When both roots are absent")
     @m.it("Raises an error")
@@ -231,8 +233,10 @@ class TestDiffDirectoryScript:
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_plain_text(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
-            diff.DiffRow("=", "a", diff.KIND_DIRECTORY),
-            diff.DiffRow(">", "b.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_SAME, "a", diff.KIND_DIRECTORY),
+            diff.DiffRow(diff.STATUS_LOCAL, "b.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_IRODS, "c.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_DIFFERENT, "d.txt", diff.KIND_FILE),
         ]
 
         self._main(["directory", "/collection"])
@@ -244,20 +248,20 @@ class TestDiffDirectoryScript:
             num_clients=4,
             no_recurse_missing_dirs=False,
         )
-        assert capsys.readouterr().out == "= a/\n> b.txt\n"
+        assert capsys.readouterr().out == "= a/\n> b.txt\n< c.txt\n* d.txt\n"
 
     @m.context("When run with JSON output")
     @m.it("Prints JSON Lines")
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_json(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
-            diff.DiffRow("*", "a", diff.KIND_DIRECTORY)
+            diff.DiffRow(diff.STATUS_DIFFERENT, "a", diff.KIND_DIRECTORY)
         ]
 
         self._main(["--json", "directory", "/collection"])
 
         assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [
-            {"status": "*", "path": "a", "kind": diff.KIND_DIRECTORY}
+            {"status": "different", "path": "a", "kind": diff.KIND_DIRECTORY}
         ]
 
     @m.context("When missing directory recursion is disabled")
@@ -277,7 +281,7 @@ class TestDiffDirectoryScript:
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_error_status(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
-            diff.DiffRow("!", "a.txt", diff.KIND_FILE)
+            diff.DiffRow(diff.STATUS_ERROR, "a.txt", diff.KIND_FILE)
         ]
 
         with pytest.raises(SystemExit):

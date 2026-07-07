@@ -26,20 +26,27 @@ from npg.cli import add_logging_arguments, integer_in_range
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
-from npg_irods.diff import KIND_DIRECTORY, STATUS_ERROR, iter_diff_directory
+from npg_irods.diff import (
+    KIND_DIRECTORY,
+    STATUS_ERROR,
+    STATUS_SYMBOLS,
+    iter_diff_directory,
+)
 from npg_irods.utilities import make_get_checksum, read_md5_file
 
 description = """
 Compare a local directory with an iRODS collection.
 
-The output contains one row for each relative path below the two roots. Status values
-are:
+The output contains one row for each relative path below the two roots. Plain text
+status symbols are:
 
     =  path exists on both sides and matches
     >  path exists only in the local directory
     <  path exists only in the iRODS collection
     *  path exists on both sides but differs
     !  path could not be compared because of an error
+
+With --json, status values are same, local_only, irods_only, different, or error.
 """
 
 
@@ -139,7 +146,7 @@ def main():
                     flush=True,
                 )
             else:
-                print(f"{row.status} {_display_path(row)}", flush=True)
+                print(f"{STATUS_SYMBOLS[row.status]} {_display_path(row)}", flush=True)
 
             if row.status == STATUS_ERROR:
                 has_error = True

@@ -28,11 +28,18 @@ from structlog import get_logger
 
 log = get_logger(__name__)
 
-STATUS_SAME = "="
-STATUS_LOCAL = ">"
-STATUS_IRODS = "<"
-STATUS_DIFFERENT = "*"
-STATUS_ERROR = "!"
+STATUS_SAME = "same"
+STATUS_LOCAL = "local_only"
+STATUS_IRODS = "irods_only"
+STATUS_DIFFERENT = "different"
+STATUS_ERROR = "error"
+STATUS_SYMBOLS = {
+    STATUS_SAME: "=",
+    STATUS_LOCAL: ">",
+    STATUS_IRODS: "<",
+    STATUS_DIFFERENT: "*",
+    STATUS_ERROR: "!",
+}
 
 KIND_FILE = "file"
 KIND_DIRECTORY = "directory"
