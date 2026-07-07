@@ -18,7 +18,7 @@
 
 """Compare local directories with iRODS collections."""
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from hashlib import file_digest
 from pathlib import Path, PurePath
@@ -78,112 +78,6 @@ def calculate_md5(path: Path) -> str:
     """Calculate the MD5 checksum of a local file."""
     with path.open("rb") as f:
         return file_digest(f, "md5").hexdigest()
-
-
-def scan_local_directory(
-    root: Path | str,
-    local_checksum: Callable[[Path | str], str] | None = None,
-) -> dict[str, DiffEntry]:
-    """Return entries below a local directory, keyed by relative POSIX path."""
-    root = Path(root)
-    entries: dict[str, DiffEntry] = {}
-
-    if not root.exists():
-        return entries
-    if not root.is_dir():
-        raise NotADirectoryError(f"Local path is not a directory: {root}")
-
-    for path in sorted(root.rglob("*")):
-        rel = path.relative_to(root).as_posix()
-
-        try:
-            if path.is_dir():
-                entries[rel] = DiffEntry(path=rel, kind=KIND_DIRECTORY)
-            elif path.is_file():
-                entries[rel] = DiffEntry(
-                    path=rel,
-                    kind=KIND_FILE,
-                    size=lambda path=path: path.stat().st_size,
-                    checksum=_local_checksum_fn(path, local_checksum),
-                )
-            else:
-                entries[rel] = DiffEntry(path=rel, kind=KIND_ERROR)
-                log.error("Unsupported local path type", path=path)
-        except Exception as e:
-            entries[rel] = DiffEntry(path=rel, kind=KIND_ERROR)
-            log.error("Error scanning local path", path=path, error=str(e))
-
-    return entries
-
-
-def scan_irods_collection(
-    root: PurePath | str,
-    pool=None,
-) -> dict[str, DiffEntry]:
-    """Return entries below an iRODS collection, keyed by relative POSIX path."""
-    root = PurePath(root)
-    entries: dict[str, DiffEntry] = {}
-
-    root_type = rods_path_type(root.as_posix())
-    if root_type is None:
-        return entries
-    if root_type != Collection:
-        raise ValueError(f"iRODS path is not a collection: {root}")
-
-    coll = Collection(root, pool=pool)
-    for item in coll.iter_contents(recurse=True):
-        rel = item.path.relative_to(root).as_posix()
-        if rel == ".":
-            continue
-
-        try:
-            if item.rods_type == Collection:
-                entries[rel] = DiffEntry(path=rel, kind=KIND_DIRECTORY)
-            elif item.rods_type == DataObject:
-                entries[rel] = DiffEntry(
-                    path=rel,
-                    kind=KIND_FILE,
-                    size=lambda item=item: item.size(),
-                    checksum=lambda item=item: item.checksum(),
-                )
-            else:
-                entries[rel] = DiffEntry(path=rel, kind=KIND_ERROR)
-                log.error("Unsupported iRODS item type", path=item)
-        except Exception as e:
-            entries[rel] = DiffEntry(path=rel, kind=KIND_ERROR)
-            log.error("Error scanning iRODS item", path=item, error=str(e))
-
-    return entries
-
-
-def diff_entries(
-    local_entries: Mapping[str, DiffEntry],
-    irods_entries: Mapping[str, DiffEntry],
-) -> list[DiffRow]:
-    """Compare two entry maps and return sorted diff rows."""
-    rows: list[DiffRow] = []
-
-    for path in sorted(set(local_entries) | set(irods_entries)):
-        local = local_entries.get(path)
-        irods = irods_entries.get(path)
-
-        if local is None:
-            rows.append(_side_only_row(irods, STATUS_IRODS))
-        elif irods is None:
-            rows.append(_side_only_row(local, STATUS_LOCAL))
-        elif local.kind == KIND_ERROR or irods.kind == KIND_ERROR:
-            rows.append(DiffRow(STATUS_ERROR, path))
-        elif local.kind != irods.kind:
-            rows.append(DiffRow(STATUS_LOCAL, path))
-            rows.append(DiffRow(STATUS_IRODS, path))
-        elif local.kind == KIND_DIRECTORY:
-            rows.append(DiffRow(STATUS_SAME, path))
-        elif local.kind == KIND_FILE:
-            rows.append(_compare_files(local, irods))
-        else:
-            rows.append(DiffRow(STATUS_ERROR, path))
-
-    return rows
 
 
 def diff_directory(
@@ -254,11 +148,6 @@ def iter_diff_directory(
             pool,
             None,
         )
-
-
-def has_errors(rows: list[DiffRow]) -> bool:
-    """Return True if any diff row is an error."""
-    return any(row.status == STATUS_ERROR for row in rows)
 
 
 def _iter_compare_dirs(

@@ -35,78 +35,53 @@ def file_entry(path, size=1, checksum="a" * 32):
     )
 
 
-def dir_entry(path):
-    return diff.DiffEntry(path=path, kind=diff.KIND_DIRECTORY)
-
-
 def rows_as_tuples(rows):
     return [(row.status, row.path) for row in rows]
 
 
 @m.describe("Directory diff")
 class TestDirectoryDiff:
-    @m.context("When entries differ in all supported ways")
-    @m.it("Returns sorted diff rows")
-    def test_diff_entries(self):
-        local = {
-            "a.txt": file_entry("a.txt", checksum="a" * 32),
-            "b.txt": file_entry("b.txt"),
-            "d.txt": file_entry("d.txt", size=1),
-            "e.txt": file_entry("e.txt", checksum="e" * 32),
-            "same_dir": dir_entry("same_dir"),
-            "type_mismatch": dir_entry("type_mismatch"),
+    @m.context("When streaming file comparisons")
+    @m.it("Yields same, different and error rows")
+    @patch("npg_irods.diff._irods_child_entries")
+    @patch("npg_irods.diff._local_child_entries")
+    @patch("npg_irods.diff.client_pool")
+    @patch("npg_irods.diff.rods_path_type", return_value=diff.Collection)
+    def test_iter_diff_directory_file_comparison_rows(
+        self,
+        _mock_rods_path_type: MagicMock,
+        mock_client_pool: MagicMock,
+        mock_local_child_entries: MagicMock,
+        mock_irods_child_entries: MagicMock,
+        tmp_path,
+    ):
+        mock_client_pool.return_value.__enter__.return_value = object()
+        mock_local_child_entries.return_value = {
+            "a.txt": file_entry("a.txt", size=1, checksum="a" * 32),
+            "b.txt": file_entry("b.txt", size=1, checksum="b" * 32),
+            "c.txt": file_entry("c.txt", size=1, checksum="c" * 32),
+            "d.txt": file_entry("d.txt", size=1, checksum="d" * 32),
         }
-        irods = {
-            "a.txt": file_entry("a.txt", checksum="a" * 32),
-            "c.txt": file_entry("c.txt"),
-            "d.txt": file_entry("d.txt", size=2),
-            "e.txt": file_entry("e.txt", checksum="f" * 32),
-            "same_dir": dir_entry("same_dir"),
-            "type_mismatch": file_entry("type_mismatch"),
-        }
-
-        rows = diff.diff_entries(local, irods)
-
-        assert rows_as_tuples(rows) == [
-            ("=", "a.txt"),
-            (">", "b.txt"),
-            ("<", "c.txt"),
-            ("*", "d.txt"),
-            ("*", "e.txt"),
-            ("=", "same_dir"),
-            (">", "type_mismatch"),
-            ("<", "type_mismatch"),
-        ]
-
-    @m.context("When file comparison raises an exception")
-    @m.it("Returns an error row")
-    def test_file_comparison_error(self):
-        local = {"a.txt": file_entry("a.txt")}
-        irods = {
-            "a.txt": diff.DiffEntry(
-                path="a.txt",
+        mock_irods_child_entries.return_value = {
+            "a.txt": file_entry("a.txt", size=1, checksum="a" * 32),
+            "b.txt": file_entry("b.txt", size=2, checksum="b" * 32),
+            "c.txt": file_entry("c.txt", size=1, checksum="e" * 32),
+            "d.txt": diff.DiffEntry(
+                path="d.txt",
                 kind=diff.KIND_FILE,
                 size=1,
                 checksum=lambda: (_ for _ in ()).throw(ValueError("bad checksum")),
-            )
+            ),
         }
 
-        rows = diff.diff_entries(local, irods)
+        rows = diff.diff_directory(tmp_path, "/collection")
 
-        assert rows_as_tuples(rows) == [("!", "a.txt")]
-        assert diff.has_errors(rows)
-
-    @m.context("When a local directory is scanned")
-    @m.it("Returns POSIX relative file and directory entries")
-    def test_scan_local_directory(self, tmp_path):
-        (tmp_path / "a").mkdir()
-        (tmp_path / "a" / "b.txt").write_text("test")
-
-        entries = diff.scan_local_directory(tmp_path)
-
-        assert entries["a"].kind == diff.KIND_DIRECTORY
-        assert entries["a/b.txt"].kind == diff.KIND_FILE
-        assert entries["a/b.txt"].get_size() == 4
+        assert rows_as_tuples(rows) == [
+            ("=", "a.txt"),
+            ("*", "b.txt"),
+            ("*", "c.txt"),
+            ("!", "d.txt"),
+        ]
 
     @m.context("When streaming a local-only tree")
     @m.it("Yields rows in sorted depth-first order")
