@@ -18,7 +18,7 @@
 
 """Compare local directories with iRODS collections."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from hashlib import file_digest
 from pathlib import Path, PurePath
@@ -47,6 +47,7 @@ class DiffEntry:
     kind: str
     size: int | Callable[[], int] | None = None
     checksum: Callable[[], str | None] | None = None
+    source_path: Path | PurePath | None = None
 
     def get_size(self) -> int:
         size = self.size() if callable(self.size) else self.size
@@ -190,27 +191,321 @@ def diff_directory(
     irods_root: PurePath | str,
     local_checksum: Callable[[Path | str], str] | None = None,
     num_clients: int = 1,
+    no_recurse_missing_dirs: bool = False,
 ) -> list[DiffRow]:
     """Compare a local directory with an iRODS collection."""
-    local_entries = scan_local_directory(local_root, local_checksum=local_checksum)
+    return list(
+        iter_diff_directory(
+            local_root,
+            irods_root,
+            local_checksum=local_checksum,
+            num_clients=num_clients,
+            no_recurse_missing_dirs=no_recurse_missing_dirs,
+        )
+    )
+
+
+def iter_diff_directory(
+    local_root: Path | str,
+    irods_root: PurePath | str,
+    local_checksum: Callable[[Path | str], str] | None = None,
+    num_clients: int = 1,
+    no_recurse_missing_dirs: bool = False,
+) -> Iterator[DiffRow]:
+    """Yield comparison rows for a local directory and iRODS collection."""
+    local_root = Path(local_root)
+    irods_root = PurePath(irods_root)
+
+    local_exists = local_root.exists()
+    irods_type = rods_path_type(irods_root.as_posix())
+
+    if not local_exists and irods_type is None:
+        raise FileNotFoundError(
+            f"Neither local directory nor iRODS collection exists: {local_root}, {irods_root}"
+        )
+    if local_exists and not local_root.is_dir():
+        raise NotADirectoryError(f"Local path is not a directory: {local_root}")
+    if irods_type is not None and irods_type != Collection:
+        raise ValueError(f"iRODS path is not a collection: {irods_root}")
+
+    local_dir = local_root if local_exists else None
+
+    if irods_type is None:
+        yield from _iter_compare_dirs(
+            local_root,
+            irods_root,
+            local_dir,
+            None,
+            local_checksum,
+            no_recurse_missing_dirs,
+            None,
+            None,
+        )
+        return
 
     with client_pool(maxsize=num_clients) as pool:
-        irods_entries = scan_irods_collection(irods_root, pool=pool)
-
-    if not local_entries and not irods_entries:
-        local_exists = Path(local_root).exists()
-        irods_exists = rods_path_type(PurePath(irods_root).as_posix()) is not None
-        if not local_exists and not irods_exists:
-            raise FileNotFoundError(
-                f"Neither local directory nor iRODS collection exists: {local_root}, {irods_root}"
-            )
-
-    return diff_entries(local_entries, irods_entries)
+        yield from _iter_compare_dirs(
+            local_root,
+            irods_root,
+            local_dir,
+            Collection(irods_root, pool=pool),
+            local_checksum,
+            no_recurse_missing_dirs,
+            pool,
+            None,
+        )
 
 
 def has_errors(rows: list[DiffRow]) -> bool:
     """Return True if any diff row is an error."""
     return any(row.status == STATUS_ERROR for row in rows)
+
+
+def _iter_compare_dirs(
+    local_root: Path,
+    irods_root: PurePath,
+    local_dir: Path | None,
+    irods_coll: Collection | None,
+    local_checksum: Callable[[Path | str], str] | None,
+    no_recurse_missing_dirs: bool,
+    pool,
+    rel_path: str | None,
+):
+    try:
+        local_entries = (
+            _local_child_entries(local_dir, local_root, local_checksum)
+            if local_dir is not None
+            else {}
+        )
+        irods_entries = (
+            _irods_child_entries(irods_coll, irods_root)
+            if irods_coll is not None
+            else {}
+        )
+    except Exception as e:
+        if rel_path is None:
+            raise
+        log.error("Error listing path", path=rel_path, error=str(e))
+        yield DiffRow(STATUS_ERROR, rel_path)
+        return
+
+    for name in sorted(set(local_entries) | set(irods_entries)):
+        local = local_entries.get(name)
+        irods = irods_entries.get(name)
+
+        if local is None:
+            yield from _iter_side_only(
+                irods,
+                STATUS_IRODS,
+                local_root,
+                irods_root,
+                local_checksum,
+                no_recurse_missing_dirs,
+                pool,
+            )
+        elif irods is None:
+            yield from _iter_side_only(
+                local,
+                STATUS_LOCAL,
+                local_root,
+                irods_root,
+                local_checksum,
+                no_recurse_missing_dirs,
+                pool,
+            )
+        elif local.kind == KIND_ERROR or irods.kind == KIND_ERROR:
+            yield DiffRow(STATUS_ERROR, local.path)
+        elif local.kind != irods.kind:
+            yield DiffRow(STATUS_LOCAL, local.path)
+            yield DiffRow(STATUS_IRODS, local.path)
+            if not no_recurse_missing_dirs:
+                if local.kind == KIND_DIRECTORY:
+                    yield from _iter_local_only_dir(
+                        local,
+                        local_root,
+                        irods_root,
+                        local_checksum,
+                        no_recurse_missing_dirs,
+                        pool,
+                    )
+                if irods.kind == KIND_DIRECTORY:
+                    yield from _iter_irods_only_collection(
+                        irods,
+                        local_root,
+                        irods_root,
+                        local_checksum,
+                        no_recurse_missing_dirs,
+                        pool,
+                    )
+        elif local.kind == KIND_DIRECTORY:
+            yield DiffRow(STATUS_SAME, local.path)
+            yield from _iter_compare_dirs(
+                local_root,
+                irods_root,
+                local.source_path,
+                Collection(irods.source_path, pool=pool),
+                local_checksum,
+                no_recurse_missing_dirs,
+                pool,
+                local.path,
+            )
+        elif local.kind == KIND_FILE:
+            yield _compare_files(local, irods)
+        else:
+            yield DiffRow(STATUS_ERROR, local.path)
+
+
+def _iter_side_only(
+    entry: DiffEntry | None,
+    status: str,
+    local_root: Path,
+    irods_root: PurePath,
+    local_checksum: Callable[[Path | str], str] | None,
+    no_recurse_missing_dirs: bool,
+    pool,
+):
+    row = _side_only_row(entry, status)
+    yield row
+
+    if (
+        entry is None
+        or entry.kind != KIND_DIRECTORY
+        or no_recurse_missing_dirs
+        or row.status == STATUS_ERROR
+    ):
+        return
+
+    if status == STATUS_LOCAL:
+        yield from _iter_local_only_dir(
+            entry,
+            local_root,
+            irods_root,
+            local_checksum,
+            no_recurse_missing_dirs,
+            pool,
+        )
+    else:
+        yield from _iter_irods_only_collection(
+            entry,
+            local_root,
+            irods_root,
+            local_checksum,
+            no_recurse_missing_dirs,
+            pool,
+        )
+
+
+def _iter_local_only_dir(
+    entry: DiffEntry,
+    local_root: Path,
+    irods_root: PurePath,
+    local_checksum: Callable[[Path | str], str] | None,
+    no_recurse_missing_dirs: bool,
+    pool,
+):
+    try:
+        children = _local_child_entries(entry.source_path, local_root, local_checksum)
+    except Exception as e:
+        log.error("Error listing local path", path=entry.path, error=str(e))
+        yield DiffRow(STATUS_ERROR, entry.path)
+        return
+
+    for name in sorted(children):
+        child = children[name]
+        yield from _iter_side_only(
+            child,
+            STATUS_LOCAL,
+            local_root,
+            irods_root,
+            local_checksum,
+            no_recurse_missing_dirs,
+            pool,
+        )
+
+
+def _iter_irods_only_collection(
+    entry: DiffEntry,
+    local_root: Path,
+    irods_root: PurePath,
+    local_checksum: Callable[[Path | str], str] | None,
+    no_recurse_missing_dirs: bool,
+    pool,
+):
+    try:
+        children = _irods_child_entries(
+            Collection(entry.source_path, pool=pool), irods_root
+        )
+    except Exception as e:
+        log.error("Error listing iRODS path", path=entry.path, error=str(e))
+        yield DiffRow(STATUS_ERROR, entry.path)
+        return
+
+    for name in sorted(children):
+        child = children[name]
+        yield from _iter_side_only(
+            child,
+            STATUS_IRODS,
+            local_root,
+            irods_root,
+            local_checksum,
+            no_recurse_missing_dirs,
+            pool,
+        )
+
+
+def _local_child_entries(
+    local_dir: Path,
+    local_root: Path,
+    local_checksum: Callable[[Path | str], str] | None,
+) -> dict[str, DiffEntry]:
+    entries = {}
+    for path in local_dir.iterdir():
+        rel = path.relative_to(local_root).as_posix()
+        if path.is_dir():
+            entries[path.name] = DiffEntry(
+                path=rel, kind=KIND_DIRECTORY, source_path=path
+            )
+        elif path.is_file():
+            entries[path.name] = DiffEntry(
+                path=rel,
+                kind=KIND_FILE,
+                size=lambda path=path: path.stat().st_size,
+                checksum=_local_checksum_fn(path, local_checksum),
+                source_path=path,
+            )
+        else:
+            entries[path.name] = DiffEntry(path=rel, kind=KIND_ERROR, source_path=path)
+            log.error("Unsupported local path type", path=path)
+
+    return entries
+
+
+def _irods_child_entries(
+    irods_coll: Collection,
+    irods_root: PurePath,
+) -> dict[str, DiffEntry]:
+    entries = {}
+    for item in irods_coll.iter_contents(recurse=False):
+        rel = item.path.relative_to(irods_root).as_posix()
+        if item.rods_type == Collection:
+            entries[item.path.name] = DiffEntry(
+                path=rel, kind=KIND_DIRECTORY, source_path=item.path
+            )
+        elif item.rods_type == DataObject:
+            entries[item.path.name] = DiffEntry(
+                path=rel,
+                kind=KIND_FILE,
+                size=lambda item=item: item.size(),
+                checksum=lambda item=item: item.checksum(),
+                source_path=item.path,
+            )
+        else:
+            entries[item.path.name] = DiffEntry(
+                path=rel, kind=KIND_ERROR, source_path=item.path
+            )
+            log.error("Unsupported iRODS item type", path=item)
+
+    return entries
 
 
 def _local_checksum_fn(

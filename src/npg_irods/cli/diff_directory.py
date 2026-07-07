@@ -26,7 +26,7 @@ from npg.cli import add_logging_arguments, integer_in_range
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
-from npg_irods.diff import diff_directory, has_errors
+from npg_irods.diff import STATUS_ERROR, iter_diff_directory
 from npg_irods.utilities import make_get_checksum, read_md5_file
 
 description = """
@@ -83,6 +83,12 @@ def main():
         default=4,
     )
     parser.add_argument(
+        "--no-recurse-missing-dirs",
+        help="Report directories that exist only on one side, but do not recurse "
+        "into them.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--json", help="Output in JSON Lines format.", action="store_true"
     )
     parser.add_argument(
@@ -116,13 +122,22 @@ def main():
             )
             raise e
 
+    has_error = False
     try:
-        rows = diff_directory(
+        for row in iter_diff_directory(
             args.directory,
             args.collection,
             local_checksum=checksum_fn,
             num_clients=args.num_clients,
-        )
+            no_recurse_missing_dirs=args.no_recurse_missing_dirs,
+        ):
+            if args.json:
+                print(json.dumps({"status": row.status, "path": row.path}), flush=True)
+            else:
+                print(f"{row.status} {row.path}", flush=True)
+
+            if row.status == STATUS_ERROR:
+                has_error = True
     except Exception as e:
         logger().error(
             "Failed to diff directory",
@@ -132,13 +147,7 @@ def main():
         )
         sys.exit(1)
 
-    for row in rows:
-        if args.json:
-            print(json.dumps({"status": row.status, "path": row.path}))
-        else:
-            print(f"{row.status} {row.path}")
-
-    if has_errors(rows):
+    if has_error:
         sys.exit(1)
 
 
