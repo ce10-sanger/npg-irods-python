@@ -72,6 +72,7 @@ class DiffRow:
 
     status: str
     path: str
+    kind: str
 
 
 def calculate_md5(path: Path) -> str:
@@ -175,7 +176,7 @@ def _iter_compare_dirs(
         if rel_path is None:
             raise
         log.error("Error listing path", path=rel_path, error=str(e))
-        yield DiffRow(STATUS_ERROR, rel_path)
+        yield DiffRow(STATUS_ERROR, rel_path, KIND_ERROR)
         return
 
     for name in sorted(set(local_entries) | set(irods_entries)):
@@ -203,10 +204,10 @@ def _iter_compare_dirs(
                 pool,
             )
         elif local.kind == KIND_ERROR or irods.kind == KIND_ERROR:
-            yield DiffRow(STATUS_ERROR, local.path)
+            yield DiffRow(STATUS_ERROR, local.path, KIND_ERROR)
         elif local.kind != irods.kind:
-            yield DiffRow(STATUS_LOCAL, local.path)
-            yield DiffRow(STATUS_IRODS, local.path)
+            yield DiffRow(STATUS_LOCAL, local.path, local.kind)
+            yield DiffRow(STATUS_IRODS, irods.path, irods.kind)
             if not no_recurse_missing_dirs:
                 if local.kind == KIND_DIRECTORY:
                     yield from _iter_local_only_dir(
@@ -227,7 +228,7 @@ def _iter_compare_dirs(
                         pool,
                     )
         elif local.kind == KIND_DIRECTORY:
-            yield DiffRow(STATUS_SAME, local.path)
+            yield DiffRow(STATUS_SAME, local.path, KIND_DIRECTORY)
             yield from _iter_compare_dirs(
                 local_root,
                 irods_root,
@@ -241,7 +242,7 @@ def _iter_compare_dirs(
         elif local.kind == KIND_FILE:
             yield _compare_files(local, irods)
         else:
-            yield DiffRow(STATUS_ERROR, local.path)
+            yield DiffRow(STATUS_ERROR, local.path, KIND_ERROR)
 
 
 def _iter_side_only(
@@ -296,7 +297,7 @@ def _iter_local_only_dir(
         children = _local_child_entries(entry.source_path, local_root, local_checksum)
     except Exception as e:
         log.error("Error listing local path", path=entry.path, error=str(e))
-        yield DiffRow(STATUS_ERROR, entry.path)
+        yield DiffRow(STATUS_ERROR, entry.path, KIND_ERROR)
         return
 
     for name in sorted(children):
@@ -326,7 +327,7 @@ def _iter_irods_only_collection(
         )
     except Exception as e:
         log.error("Error listing iRODS path", path=entry.path, error=str(e))
-        yield DiffRow(STATUS_ERROR, entry.path)
+        yield DiffRow(STATUS_ERROR, entry.path, KIND_ERROR)
         return
 
     for name in sorted(children):
@@ -375,22 +376,27 @@ def _irods_child_entries(
 ) -> dict[str, DiffEntry]:
     entries = {}
     for item in irods_coll.iter_contents(recurse=False):
-        rel = item.path.relative_to(irods_root).as_posix()
         if item.rods_type == Collection:
+            full_path = item.path
+            rel = full_path.relative_to(irods_root).as_posix()
             entries[item.path.name] = DiffEntry(
-                path=rel, kind=KIND_DIRECTORY, source_path=item.path
+                path=rel, kind=KIND_DIRECTORY, source_path=full_path
             )
         elif item.rods_type == DataObject:
-            entries[item.path.name] = DiffEntry(
+            full_path = item.path / item.name
+            rel = full_path.relative_to(irods_root).as_posix()
+            entries[item.name] = DiffEntry(
                 path=rel,
                 kind=KIND_FILE,
                 size=lambda item=item: item.size(),
                 checksum=lambda item=item: item.checksum(),
-                source_path=item.path,
+                source_path=full_path,
             )
         else:
+            full_path = item.path
+            rel = full_path.relative_to(irods_root).as_posix()
             entries[item.path.name] = DiffEntry(
-                path=rel, kind=KIND_ERROR, source_path=item.path
+                path=rel, kind=KIND_ERROR, source_path=full_path
             )
             log.error("Unsupported iRODS item type", path=item)
 
@@ -409,21 +415,21 @@ def _local_checksum_fn(
 
 def _side_only_row(entry: DiffEntry | None, status: str) -> DiffRow:
     if entry is None:
-        return DiffRow(STATUS_ERROR, "")
+        return DiffRow(STATUS_ERROR, "", KIND_ERROR)
     if entry.kind == KIND_ERROR:
-        return DiffRow(STATUS_ERROR, entry.path)
-    return DiffRow(status, entry.path)
+        return DiffRow(STATUS_ERROR, entry.path, KIND_ERROR)
+    return DiffRow(status, entry.path, entry.kind)
 
 
 def _compare_files(local: DiffEntry, irods: DiffEntry) -> DiffRow:
     try:
         if local.get_size() != irods.get_size():
-            return DiffRow(STATUS_DIFFERENT, local.path)
+            return DiffRow(STATUS_DIFFERENT, local.path, KIND_FILE)
 
         if local.get_checksum() != irods.get_checksum():
-            return DiffRow(STATUS_DIFFERENT, local.path)
+            return DiffRow(STATUS_DIFFERENT, local.path, KIND_FILE)
 
-        return DiffRow(STATUS_SAME, local.path)
+        return DiffRow(STATUS_SAME, local.path, KIND_FILE)
     except Exception as e:
         log.error("Error comparing path", path=local.path, error=str(e))
-        return DiffRow(STATUS_ERROR, local.path)
+        return DiffRow(STATUS_ERROR, local.path, KIND_FILE)

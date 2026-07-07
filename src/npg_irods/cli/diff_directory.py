@@ -26,7 +26,7 @@ from npg.cli import add_logging_arguments, integer_in_range
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
-from npg_irods.diff import STATUS_ERROR, iter_diff_directory
+from npg_irods.diff import KIND_DIRECTORY, STATUS_ERROR, iter_diff_directory
 from npg_irods.utilities import make_get_checksum, read_md5_file
 
 description = """
@@ -132,9 +132,14 @@ def main():
             no_recurse_missing_dirs=args.no_recurse_missing_dirs,
         ):
             if args.json:
-                print(json.dumps({"status": row.status, "path": row.path}), flush=True)
+                print(
+                    json.dumps(
+                        {"status": row.status, "path": row.path, "kind": row.kind}
+                    ),
+                    flush=True,
+                )
             else:
-                print(f"{row.status} {row.path}", flush=True)
+                print(f"{row.status} {_display_path(row)}", flush=True)
 
             if row.status == STATUS_ERROR:
                 has_error = True
@@ -149,6 +154,13 @@ def main():
 
     if has_error:
         sys.exit(1)
+
+
+def _display_path(row):
+    if row.kind == KIND_DIRECTORY:
+        return f"{row.path}/"
+
+    return row.path
 
 
 if __name__ == "__main__":
