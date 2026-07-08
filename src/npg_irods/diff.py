@@ -21,11 +21,12 @@
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from hashlib import file_digest
 from pathlib import Path, PurePath
 
 from partisan.irods import Collection, DataObject, client_pool, rods_path_type
 from structlog import get_logger
+
+from npg_irods.checksum import calculate_file_checksum
 
 log = get_logger(__name__)
 
@@ -83,12 +84,6 @@ class DiffRow:
     status: str
     path: str
     kind: str
-
-
-def calculate_md5(path: Path) -> str:
-    """Calculate the MD5 checksum of a local file."""
-    with path.open("rb") as f:
-        return file_digest(f, "md5").hexdigest()
 
 
 def make_diff_filter(
@@ -486,9 +481,14 @@ def _local_checksum_fn(
     local_checksum: Callable[[Path | str], str] | None,
 ) -> Callable[[], str | None]:
     if local_checksum is None:
-        return lambda path=path: calculate_md5(path)
+        return lambda path=path: _calculate_local_checksum(path)
 
     return lambda path=path: local_checksum(path)
+
+
+def _calculate_local_checksum(path: Path) -> str:
+    log.debug("Calculating local checksum on the fly", path=path)
+    return calculate_file_checksum(path)
 
 
 def _side_only_row(entry: DiffEntry | None, status: str) -> DiffRow:

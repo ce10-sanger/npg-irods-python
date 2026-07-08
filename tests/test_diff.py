@@ -107,6 +107,25 @@ class TestDirectoryDiff:
         assert entries["file.txt"].path == "sub/file.txt"
         assert entries["file.txt"].source_path == PurePath("/root/sub/file.txt")
 
+    @m.context("When no local checksum function is provided")
+    @m.it("Calculates the local checksum on the fly")
+    @patch("npg_irods.diff.calculate_file_checksum", autospec=True)
+    def test_local_checksum_fn_calculates_checksum_on_the_fly(
+        self, mock_calculate_file_checksum: MagicMock, tmp_path, caplog
+    ):
+        path = tmp_path / "a.txt"
+        path.write_text("test")
+        mock_calculate_file_checksum.return_value = "a" * 32
+
+        checksum_fn = diff._local_checksum_fn(path, None)
+
+        with caplog.at_level("DEBUG"):
+            checksum = checksum_fn()
+
+        assert checksum == "a" * 32
+        mock_calculate_file_checksum.assert_called_once_with(path)
+        assert "Calculating local checksum on the fly" in caplog.text
+
     @m.context("When streaming a local-only tree")
     @m.it("Yields rows in sorted depth-first order")
     @patch("npg_irods.diff.rods_path_type", return_value=None)

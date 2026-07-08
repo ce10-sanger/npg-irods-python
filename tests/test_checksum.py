@@ -23,7 +23,7 @@ from unittest.mock import patch, MagicMock
 from pytest import mark as m
 from pytest import LogCaptureFixture
 
-from npg_irods.checksum import checksum_directory
+from npg_irods.checksum import calculate_file_checksum, checksum_directory
 from npg_irods.cli import checksum_directory as checksum_directory_script
 
 
@@ -60,6 +60,22 @@ class TestChecksumScript:
 
 @m.describe("Checksum")
 class TestChecksum:
+
+    @m.context("When calculating a file checksum")
+    @m.it("Returns the MD5 checksum")
+    def test_calculate_file_checksum(self, tmp_path, caplog: LogCaptureFixture):
+        # Arrange
+        path = tmp_path / "a.txt"
+        path.write_text("test")
+
+        # Act
+        with caplog.at_level("DEBUG"):
+            checksum = calculate_file_checksum(path)
+
+        # Assert
+        assert checksum == "098f6bcd4621d373cade4e832627b4f6"
+        assert "Calculating checksum." in caplog.text
+        assert "Calculated checksum." in caplog.text
 
     @m.context("When checksumming a directory without an existing checksum file")
     @m.it("Creates a checksum file")
