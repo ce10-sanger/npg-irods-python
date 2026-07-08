@@ -33,7 +33,7 @@ from npg_irods.diff import (
     STATUS_SYMBOLS,
     iter_diff_directory,
 )
-from npg_irods.utilities import sanitise_path
+from npg_irods.utilities import make_get_checksum, read_md5_file, sanitise_path
 from npg_irods.xenium import iter_output_directories, xenium_irods_partial_path
 
 description = """
@@ -61,6 +61,19 @@ def main():
         help="The iRODS root collection containing Xenium results.",
         type=str,
     )
+    checksums_group = parser.add_mutually_exclusive_group(required=False)
+    checksums_group.add_argument(
+        "--use-checksum-files",
+        help="Read local MD5 checksums from files alongside the data files with "
+        "the same name as the data file but with an additional '.md5' extension.",
+        action="store_true",
+    )
+    checksums_group.add_argument(
+        "--use-checksums-file",
+        help="Read local MD5 checksums from the specified GNU md5sum-format file.",
+        type=str,
+        default=None,
+    )
     parser.add_argument(
         "--json", help="Output in JSON Lines format.", action="store_true"
     )
@@ -84,6 +97,20 @@ def main():
     local_root = Path(sanitise_path(args.root))
     irods_root = PurePath(sanitise_path(args.collection))
 
+    checksum_fn = None
+    if args.use_checksum_files:
+        checksum_fn = read_md5_file
+    elif args.use_checksums_file:
+        try:
+            checksum_fn = make_get_checksum(Path(args.use_checksums_file))
+        except Exception as e:
+            logger().error(
+                "Failed to read checksums file",
+                path=args.use_checksums_file,
+                error=str(e),
+            )
+            sys.exit(1)
+
     has_error = False
     has_difference = False
 
@@ -103,7 +130,9 @@ def main():
             print(f"# {experiment.as_posix()} {collection.as_posix()}", flush=True)
 
         try:
-            for row in iter_diff_directory(experiment, collection):
+            for row in iter_diff_directory(
+                experiment, collection, local_checksum=checksum_fn
+            ):
                 if args.json:
                     print(
                         json.dumps(

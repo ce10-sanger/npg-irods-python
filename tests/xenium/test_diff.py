@@ -107,6 +107,7 @@ class TestDiffXeniumScript:
         mock_iter_diff_directory.assert_called_once_with(
             experiment,
             PurePath("/irods/xenium/XETG00000/0000000/experiment"),
+            local_checksum=None,
         )
         assert (
             capsys.readouterr().out
@@ -145,6 +146,77 @@ class TestDiffXeniumScript:
                 "kind": diff.KIND_FILE,
             }
         ]
+
+    @m.context("When run with checksum files")
+    @m.it("Passes the md5 file reader to the diff iterator")
+    @patch("npg_irods.cli.diff_xenium.iter_diff_directory", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.xenium_irods_partial_path", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.iter_output_directories", autospec=True)
+    def test_main_use_checksum_files(
+        self,
+        mock_iter_output_directories: MagicMock,
+        mock_xenium_irods_partial_path: MagicMock,
+        mock_iter_diff_directory: MagicMock,
+    ):
+        experiment = Path("experiment")
+        mock_iter_output_directories.return_value = [experiment]
+        mock_xenium_irods_partial_path.return_value = PurePath(
+            "XETG00000", "0000000", "experiment"
+        )
+        mock_iter_diff_directory.return_value = []
+
+        self._main(["--use-checksum-files", "root", "/irods/xenium"])
+
+        assert (
+            mock_iter_diff_directory.call_args.kwargs["local_checksum"]
+            is diff_xenium_script.read_md5_file
+        )
+
+    @m.context("When run with a checksums file")
+    @m.it("Builds and passes a checksum function")
+    @patch("npg_irods.cli.diff_xenium.make_get_checksum", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.iter_diff_directory", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.xenium_irods_partial_path", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.iter_output_directories", autospec=True)
+    def test_main_use_checksums_file(
+        self,
+        mock_iter_output_directories: MagicMock,
+        mock_xenium_irods_partial_path: MagicMock,
+        mock_iter_diff_directory: MagicMock,
+        mock_make_get_checksum: MagicMock,
+    ):
+        checksum_fn = lambda path: "a" * 32
+        experiment = Path("experiment")
+        mock_iter_output_directories.return_value = [experiment]
+        mock_xenium_irods_partial_path.return_value = PurePath(
+            "XETG00000", "0000000", "experiment"
+        )
+        mock_iter_diff_directory.return_value = []
+        mock_make_get_checksum.return_value = checksum_fn
+
+        self._main(["--use-checksums-file", "checksums.md5", "root", "/irods/xenium"])
+
+        mock_make_get_checksum.assert_called_once_with(Path("checksums.md5"))
+        assert (
+            mock_iter_diff_directory.call_args.kwargs["local_checksum"] is checksum_fn
+        )
+
+    @m.context("When a checksums file cannot be read")
+    @m.it("Logs and exits non-zero")
+    @patch("npg_irods.cli.diff_xenium.make_get_checksum", autospec=True)
+    def test_main_use_checksums_file_error(
+        self, mock_make_get_checksum: MagicMock, caplog
+    ):
+        mock_make_get_checksum.side_effect = ValueError("bad checksums file")
+
+        with caplog.at_level("ERROR"):
+            with pytest.raises(SystemExit) as exit_info:
+                self._main(
+                    ["--use-checksums-file", "checksums.md5", "root", "/irods/xenium"]
+                )
+
+        assert exit_info.value.code == 1
+        assert "Failed to read checksums file" in caplog.text
 
     @m.context("When any difference rows are produced")
     @m.it("Exits non-zero after printing output")
@@ -203,7 +275,9 @@ class TestDiffXeniumScript:
 
         assert exit_info.value.code == 1
         mock_iter_diff_directory.assert_called_once_with(
-            good, PurePath("/irods/xenium/XETG00000/0000000/good")
+            good,
+            PurePath("/irods/xenium/XETG00000/0000000/good"),
+            local_checksum=None,
         )
         assert "Failed to map Xenium result directory" in caplog.text
 
