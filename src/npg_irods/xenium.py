@@ -17,6 +17,7 @@
 #
 
 import json
+from collections.abc import Iterator
 from pathlib import Path, PurePath
 
 from partisan.irods import AVU, Collection
@@ -70,6 +71,28 @@ def make_xenium_metadata(result_dir: Path) -> list[AVU]:
         for k, v in _load_metadata(d).items()
         if k in Instrument
     ]
+
+
+def iter_output_directories(root: Path | str) -> Iterator[Path]:
+    """Yield Xenium result directories found below a root directory."""
+    root = Path(root)
+
+    def on_error(error: OSError):
+        log.error("Could not scan directory", error=error, filename=error.filename)
+
+    for dirpath, dirnames, filenames in root.walk(
+        on_error=on_error, follow_symlinks=False
+    ):
+        dirnames.sort()
+        log.debug("Considering dirpath", dirpath=dirpath)
+
+        if EXPERIMENT_FILENAME in filenames:
+            yield dirpath
+
+
+def xenium_irods_partial_path(result_dir: Path) -> PurePath:
+    """Return the standard relative iRODS path for a Xenium result directory."""
+    return _irods_partial_path(result_dir)
 
 
 def publish_result_dirs(
@@ -139,7 +162,7 @@ def publish_result_dir(
         raise ValueError(f"Remote root collection '{remote_root}' does not exist")
 
     src = result_dir.resolve()
-    dest = remote_root / _irods_partial_path(src)
+    dest = remote_root / xenium_irods_partial_path(src)
     avus = make_xenium_metadata(src)
 
     log.info(
