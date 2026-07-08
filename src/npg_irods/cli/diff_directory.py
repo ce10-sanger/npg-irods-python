@@ -27,10 +27,12 @@ from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.diff import (
+    DIFFERENCE_STATUSES,
     KIND_DIRECTORY,
     STATUS_ERROR,
     STATUS_SYMBOLS,
     iter_diff_directory,
+    make_diff_filter,
 )
 from npg_irods.utilities import make_get_checksum, read_md5_file
 
@@ -69,6 +71,38 @@ def main():
         help="The iRODS collection to compare.",
         type=str,
     )
+    parser.add_argument(
+        "--exclude",
+        help="Exclude paths matching the given regular expression. May be used "
+        "multiple times to filter on additional regular expressions. Exclude "
+        "regular expressions are applied after any include regular expressions. "
+        "Paths are relative to the compared directory and collection roots. "
+        "Optional, defaults to none.",
+        type=str,
+        action="append",
+        default=[],
+    )
+    parser.add_argument(
+        "--include",
+        help="Include paths matching the given regular expression. Only matching "
+        "paths will be compared, all others will be ignored. If more than one "
+        "regex is supplied, the matches for all of them are aggregated. "
+        "Paths are relative to the compared directory and collection roots. "
+        "Optional, defaults to all.",
+        type=str,
+        action="append",
+        default=[],
+    )
+    parser.add_argument(
+        "--include-top-level-files",
+        help="Include top level files and data objects. Composes with other filters.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--exclude-md5",
+        help="Exclude md5 files and data objects. Composes with other filters.",
+        action="store_true",
+    )
     checksums_group = parser.add_mutually_exclusive_group(required=False)
     checksums_group.add_argument(
         "--use-checksum-files",
@@ -93,6 +127,16 @@ def main():
         "--no-recurse-missing-dirs",
         help="Report directories that exist only on one side, but do not recurse "
         "into them.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--exit-on-difference",
+        help="Exit with status 1 after printing the first difference.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--exit-on-error",
+        help="Exit with status 1 after printing the first error.",
         action="store_true",
     )
     parser.add_argument(
@@ -129,12 +173,28 @@ def main():
             )
             raise e
 
+    filter_fn = (
+        make_diff_filter(
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+            include_top_level_files=args.include_top_level_files,
+            exclude_md5=args.exclude_md5,
+        )
+        if args.exclude
+        or args.include
+        or args.include_top_level_files
+        or args.exclude_md5
+        else None
+    )
+
     has_error = False
+    has_difference = False
     try:
         for row in iter_diff_directory(
             args.directory,
             args.collection,
             local_checksum=checksum_fn,
+            filter_fn=filter_fn,
             num_clients=args.num_clients,
             no_recurse_missing_dirs=args.no_recurse_missing_dirs,
         ):
@@ -150,6 +210,12 @@ def main():
 
             if row.status == STATUS_ERROR:
                 has_error = True
+                if args.exit_on_error:
+                    sys.exit(1)
+            elif row.status in DIFFERENCE_STATUSES:
+                has_difference = True
+                if args.exit_on_difference:
+                    sys.exit(1)
     except Exception as e:
         logger().error(
             "Failed to diff directory",
@@ -159,7 +225,7 @@ def main():
         )
         sys.exit(1)
 
-    if has_error:
+    if has_error or has_difference:
         sys.exit(1)
 
 

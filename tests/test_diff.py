@@ -216,6 +216,135 @@ class TestDirectoryDiff:
 
         assert rows_as_tuples(rows) == [(diff.STATUS_LOCAL, "a.txt")]
 
+    @m.context("With an include filter")
+    @m.it("Only compares matching paths")
+    @patch("npg_irods.diff.rods_path_type", return_value=None)
+    def test_diff_directory_include_filter(
+        self, _mock_rods_path_type: MagicMock, tmp_path
+    ):
+        (tmp_path / "keep.txt").write_text("test")
+        (tmp_path / "skip.txt").write_text("test")
+
+        rows = diff.diff_directory(
+            tmp_path,
+            "/missing",
+            filter_fn=diff.make_diff_filter(include_patterns=["keep"]),
+        )
+
+        assert rows_as_tuples(rows) == [(diff.STATUS_LOCAL, "keep.txt")]
+
+    @m.context("With an exclude filter")
+    @m.it("Skips matching paths")
+    @patch("npg_irods.diff.rods_path_type", return_value=None)
+    def test_diff_directory_exclude_filter(
+        self, _mock_rods_path_type: MagicMock, tmp_path
+    ):
+        (tmp_path / "keep.txt").write_text("test")
+        (tmp_path / "skip.txt").write_text("test")
+
+        rows = diff.diff_directory(
+            tmp_path,
+            "/missing",
+            filter_fn=diff.make_diff_filter(exclude_patterns=["skip"]),
+        )
+
+        assert rows_as_tuples(rows) == [(diff.STATUS_LOCAL, "keep.txt")]
+
+    @m.context("With include and exclude filters")
+    @m.it("Applies exclude filters after include filters")
+    @patch("npg_irods.diff.rods_path_type", return_value=None)
+    def test_diff_directory_include_exclude_filter(
+        self, _mock_rods_path_type: MagicMock, tmp_path
+    ):
+        (tmp_path / "a_keep.txt").write_text("test")
+        (tmp_path / "a_skip.txt").write_text("test")
+        (tmp_path / "b.txt").write_text("test")
+
+        rows = diff.diff_directory(
+            tmp_path,
+            "/missing",
+            filter_fn=diff.make_diff_filter(
+                include_patterns=["a_"], exclude_patterns=["skip"]
+            ),
+        )
+
+        assert rows_as_tuples(rows) == [(diff.STATUS_LOCAL, "a_keep.txt")]
+
+    @m.context("With include-top-level-files")
+    @m.it("Includes only files directly below the root")
+    @patch("npg_irods.diff.rods_path_type", return_value=None)
+    def test_diff_directory_include_top_level_files(
+        self, _mock_rods_path_type: MagicMock, tmp_path
+    ):
+        (tmp_path / "a").mkdir()
+        (tmp_path / "a" / "nested.txt").write_text("test")
+        (tmp_path / "root.txt").write_text("test")
+
+        rows = diff.diff_directory(
+            tmp_path,
+            "/missing",
+            filter_fn=diff.make_diff_filter(include_top_level_files=True),
+        )
+
+        assert rows_as_tuples(rows) == [(diff.STATUS_LOCAL, "root.txt")]
+
+    @m.context("With exclude-md5")
+    @m.it("Skips matching local and iRODS md5 paths")
+    @patch("npg_irods.diff.rods_path_type", return_value=None)
+    def test_diff_directory_exclude_md5_filter(
+        self, _mock_rods_path_type: MagicMock, tmp_path
+    ):
+        (tmp_path / "a.txt").write_text("test")
+        (tmp_path / "a.txt.md5").write_text("test")
+        (tmp_path / "dir").mkdir()
+        (tmp_path / "dir" / "b.txt").write_text("test")
+        (tmp_path / "dir" / "b.txt.md5").write_text("test")
+
+        rows = diff.diff_directory(
+            tmp_path,
+            "/missing",
+            filter_fn=diff.make_diff_filter(exclude_md5=True),
+        )
+
+        assert rows_as_tuples(rows) == [
+            (diff.STATUS_LOCAL, "a.txt"),
+            (diff.STATUS_LOCAL, "dir"),
+            (diff.STATUS_LOCAL, "dir/b.txt"),
+        ]
+
+        obj = SimpleNamespace(
+            rods_type=diff.DataObject,
+            path=PurePath("/root"),
+            name="c.txt.md5",
+            size=lambda: 1,
+            checksum=lambda: "a" * 32,
+        )
+        coll = SimpleNamespace(iter_contents=lambda recurse=False: [obj])
+
+        assert (
+            diff._irods_child_entries(
+                coll, PurePath("/root"), diff.make_diff_filter(exclude_md5=True)
+            )
+            == {}
+        )
+
+    @m.context("When a filtered directory has matching descendants")
+    @m.it("Prunes the directory and does not recurse")
+    @patch("npg_irods.diff.rods_path_type", return_value=None)
+    def test_diff_directory_filter_prunes_directory(
+        self, _mock_rods_path_type: MagicMock, tmp_path
+    ):
+        (tmp_path / "a").mkdir()
+        (tmp_path / "a" / "z.txt").write_text("test")
+
+        rows = diff.diff_directory(
+            tmp_path,
+            "/missing",
+            filter_fn=diff.make_diff_filter(include_patterns=["z.txt"]),
+        )
+
+        assert rows == []
+
     @m.context("When both roots are absent")
     @m.it("Raises an error")
     @patch("npg_irods.diff.rods_path_type", return_value=None)
@@ -234,9 +363,6 @@ class TestDiffDirectoryScript:
     def test_main_plain_text(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
             diff.DiffRow(diff.STATUS_SAME, "a", diff.KIND_DIRECTORY),
-            diff.DiffRow(diff.STATUS_LOCAL, "b.txt", diff.KIND_FILE),
-            diff.DiffRow(diff.STATUS_IRODS, "c.txt", diff.KIND_FILE),
-            diff.DiffRow(diff.STATUS_DIFFERENT, "d.txt", diff.KIND_FILE),
         ]
 
         self._main(["directory", "/collection"])
@@ -245,24 +371,61 @@ class TestDiffDirectoryScript:
             "directory",
             "/collection",
             local_checksum=None,
+            filter_fn=None,
             num_clients=4,
             no_recurse_missing_dirs=False,
         )
-        assert capsys.readouterr().out == "= a/\n> b.txt\n< c.txt\n* d.txt\n"
+        assert capsys.readouterr().out == "= a/\n"
 
     @m.context("When run with JSON output")
     @m.it("Prints JSON Lines")
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_json(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
-            diff.DiffRow(diff.STATUS_DIFFERENT, "a", diff.KIND_DIRECTORY)
+            diff.DiffRow(diff.STATUS_SAME, "a", diff.KIND_DIRECTORY)
         ]
 
         self._main(["--json", "directory", "/collection"])
 
         assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [
-            {"status": "different", "path": "a", "kind": diff.KIND_DIRECTORY}
+            {"status": "same", "path": "a", "kind": diff.KIND_DIRECTORY}
         ]
+
+    @m.context("When filtering options are supplied")
+    @m.it("Builds and passes a diff filter")
+    @patch("npg_irods.cli.diff_directory.make_diff_filter", autospec=True)
+    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
+    def test_main_filter_options(
+        self,
+        mock_iter_diff_directory: MagicMock,
+        mock_make_diff_filter: MagicMock,
+    ):
+        filter_fn = lambda entry: False
+        mock_make_diff_filter.return_value = filter_fn
+        mock_iter_diff_directory.return_value = []
+
+        self._main(
+            [
+                "--include",
+                "include1",
+                "--include",
+                "include2",
+                "--exclude",
+                "exclude1",
+                "--include-top-level-files",
+                "--exclude-md5",
+                "directory",
+                "/collection",
+            ]
+        )
+
+        mock_make_diff_filter.assert_called_once_with(
+            include_patterns=["include1", "include2"],
+            exclude_patterns=["exclude1"],
+            include_top_level_files=True,
+            exclude_md5=True,
+        )
+        assert mock_iter_diff_directory.call_args.kwargs["filter_fn"] is filter_fn
 
     @m.context("When missing directory recursion is disabled")
     @m.it("Passes the option to the diff iterator")
@@ -277,16 +440,63 @@ class TestDiffDirectoryScript:
         )
 
     @m.context("When any error rows are produced")
-    @m.it("Exits non-zero after printing output")
+    @m.it("Exits non-zero after printing all output")
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_error_status(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
-            diff.DiffRow(diff.STATUS_ERROR, "a.txt", diff.KIND_FILE)
+            diff.DiffRow(diff.STATUS_ERROR, "a.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_SAME, "b.txt", diff.KIND_FILE),
         ]
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exit_info:
             self._main(["directory", "/collection"])
 
+        assert exit_info.value.code == 1
+        assert capsys.readouterr().out == "! a.txt\n= b.txt\n"
+
+    @m.context("When any difference rows are produced")
+    @m.it("Exits non-zero after printing all output")
+    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
+    def test_main_difference_status(self, mock_iter_diff_directory: MagicMock, capsys):
+        mock_iter_diff_directory.return_value = [
+            diff.DiffRow(diff.STATUS_LOCAL, "a.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_SAME, "b.txt", diff.KIND_FILE),
+        ]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["directory", "/collection"])
+
+        assert exit_info.value.code == 1
+        assert capsys.readouterr().out == "> a.txt\n= b.txt\n"
+
+    @m.context("When exit-on-difference is set")
+    @m.it("Exits after printing the first difference")
+    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
+    def test_main_exit_on_difference(self, mock_iter_diff_directory: MagicMock, capsys):
+        mock_iter_diff_directory.return_value = [
+            diff.DiffRow(diff.STATUS_LOCAL, "a.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_SAME, "b.txt", diff.KIND_FILE),
+        ]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["--exit-on-difference", "directory", "/collection"])
+
+        assert exit_info.value.code == 1
+        assert capsys.readouterr().out == "> a.txt\n"
+
+    @m.context("When exit-on-error is set")
+    @m.it("Exits after printing the first error")
+    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
+    def test_main_exit_on_error(self, mock_iter_diff_directory: MagicMock, capsys):
+        mock_iter_diff_directory.return_value = [
+            diff.DiffRow(diff.STATUS_ERROR, "a.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_SAME, "b.txt", diff.KIND_FILE),
+        ]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["--exit-on-error", "directory", "/collection"])
+
+        assert exit_info.value.code == 1
         assert capsys.readouterr().out == "! a.txt\n"
 
     @staticmethod
