@@ -27,9 +27,10 @@ from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.diff import (
-    DIFFERENCE_STATUSES,
     KIND_DIRECTORY,
+    KIND_ERROR,
     STATUS_ERROR,
+    STATUS_SAME,
     STATUS_SYMBOLS,
     iter_diff_directory,
 )
@@ -111,69 +112,122 @@ def main():
             )
             sys.exit(1)
 
-    has_error = False
-    has_difference = False
+    has_non_same = False
 
     for experiment in iter_output_directories(local_root):
         try:
             collection = irods_root / xenium_irods_partial_path(experiment)
         except Exception as e:
-            has_error = True
+            has_non_same = True
             logger().error(
                 "Failed to map Xenium result directory",
                 experiment=experiment.as_posix(),
                 error=str(e),
             )
+            _print_result(
+                args.json,
+                experiment,
+                None,
+                STATUS_ERROR,
+                {
+                    "status": STATUS_ERROR,
+                    "path": "",
+                    "kind": KIND_ERROR,
+                    "error": str(e),
+                },
+            )
             continue
 
-        if not args.json:
-            print(f"# {experiment.as_posix()} {collection.as_posix()}", flush=True)
-
         try:
+            trigger = None
             for row in iter_diff_directory(
                 experiment, collection, local_checksum=checksum_fn
             ):
-                if args.json:
-                    print(
-                        json.dumps(
-                            {
-                                "experiment": experiment.as_posix(),
-                                "collection": collection.as_posix(),
-                                "status": row.status,
-                                "path": row.path,
-                                "kind": row.kind,
-                            }
-                        ),
-                        flush=True,
-                    )
-                else:
-                    print(
-                        f"{STATUS_SYMBOLS[row.status]} {_display_path(row)}",
-                        flush=True,
-                    )
+                if row.status != STATUS_SAME:
+                    trigger = row
+                    break
 
-                if row.status == STATUS_ERROR:
-                    has_error = True
-                elif row.status in DIFFERENCE_STATUSES:
-                    has_difference = True
+            if trigger is None:
+                _print_result(args.json, experiment, collection, STATUS_SAME, None)
+            else:
+                has_non_same = True
+                _print_result(
+                    args.json,
+                    experiment,
+                    collection,
+                    trigger.status,
+                    {
+                        "status": trigger.status,
+                        "path": trigger.path,
+                        "kind": trigger.kind,
+                    },
+                )
         except Exception as e:
-            has_error = True
+            has_non_same = True
             logger().error(
                 "Failed to diff Xenium result directory",
                 experiment=experiment.as_posix(),
                 collection=collection.as_posix(),
                 error=str(e),
             )
+            _print_result(
+                args.json,
+                experiment,
+                collection,
+                STATUS_ERROR,
+                {
+                    "status": STATUS_ERROR,
+                    "path": "",
+                    "kind": KIND_ERROR,
+                    "error": str(e),
+                },
+            )
 
-    if has_error or has_difference:
+    if has_non_same:
         sys.exit(1)
 
 
-def _display_path(row):
-    if row.kind == KIND_DIRECTORY:
-        return f"{row.path}/"
+def _print_result(json_output, experiment, collection, status, trigger):
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "experiment": experiment.as_posix(),
+                    "collection": _collection_path(collection),
+                    "status": status,
+                    "trigger": trigger,
+                }
+            ),
+            flush=True,
+        )
+        return
 
-    return row.path
+    fields = [
+        STATUS_SYMBOLS[status],
+        experiment.as_posix(),
+        _collection_path(collection),
+    ]
+    if trigger is not None:
+        if "error" in trigger:
+            fields.extend([trigger["kind"], trigger["error"]])
+        else:
+            fields.extend([trigger["kind"], _display_trigger_path(trigger)])
+
+    print(" ".join(fields), flush=True)
+
+
+def _collection_path(collection):
+    if collection is None:
+        return "-"
+
+    return collection.as_posix()
+
+
+def _display_trigger_path(trigger):
+    if trigger["kind"] == KIND_DIRECTORY:
+        return f"{trigger['path']}/"
+
+    return trigger["path"]
 
 
 if __name__ == "__main__":

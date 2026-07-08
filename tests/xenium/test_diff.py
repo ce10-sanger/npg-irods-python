@@ -81,7 +81,7 @@ class TestXeniumOutputDirectoryDiscovery:
 class TestDiffXeniumScript:
 
     @m.context("When run with default parameters")
-    @m.it("Prints a header and text diff rows")
+    @m.it("Prints one text row per output directory")
     @patch("npg_irods.cli.diff_xenium.iter_diff_directory", autospec=True)
     @patch("npg_irods.cli.diff_xenium.xenium_irods_partial_path", autospec=True)
     @patch("npg_irods.cli.diff_xenium.iter_output_directories", autospec=True)
@@ -97,7 +97,8 @@ class TestDiffXeniumScript:
         mock_iter_output_directories.return_value = [experiment]
         mock_xenium_irods_partial_path.return_value = collection
         mock_iter_diff_directory.return_value = [
-            diff.DiffRow(diff.STATUS_SAME, "a", diff.KIND_DIRECTORY)
+            diff.DiffRow(diff.STATUS_SAME, "a", diff.KIND_DIRECTORY),
+            diff.DiffRow(diff.STATUS_SAME, "a/b.txt", diff.KIND_FILE),
         ]
 
         self._main(["root", "/irods/xenium"])
@@ -111,11 +112,11 @@ class TestDiffXeniumScript:
         )
         assert (
             capsys.readouterr().out
-            == "# experiment /irods/xenium/XETG00000/0000000/experiment\n= a/\n"
+            == "= experiment /irods/xenium/XETG00000/0000000/experiment\n"
         )
 
     @m.context("When run with JSON output")
-    @m.it("Prints JSON Lines with experiment and collection")
+    @m.it("Prints one JSON Line per output directory")
     @patch("npg_irods.cli.diff_xenium.iter_diff_directory", autospec=True)
     @patch("npg_irods.cli.diff_xenium.xenium_irods_partial_path", autospec=True)
     @patch("npg_irods.cli.diff_xenium.iter_output_directories", autospec=True)
@@ -142,8 +143,46 @@ class TestDiffXeniumScript:
                 "experiment": "experiment",
                 "collection": "/irods/xenium/XETG00000/0000000/experiment",
                 "status": "same",
-                "path": "a.txt",
-                "kind": diff.KIND_FILE,
+                "trigger": None,
+            }
+        ]
+
+    @m.context("When an output directory has a non-same diff row")
+    @m.it("Uses the first non-same row as trigger details")
+    @patch("npg_irods.cli.diff_xenium.iter_diff_directory", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.xenium_irods_partial_path", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.iter_output_directories", autospec=True)
+    def test_main_json_difference_trigger(
+        self,
+        mock_iter_output_directories: MagicMock,
+        mock_xenium_irods_partial_path: MagicMock,
+        mock_iter_diff_directory: MagicMock,
+        capsys,
+    ):
+        experiment = Path("experiment")
+        mock_iter_output_directories.return_value = [experiment]
+        mock_xenium_irods_partial_path.return_value = PurePath(
+            "XETG00000", "0000000", "experiment"
+        )
+        mock_iter_diff_directory.return_value = [
+            diff.DiffRow(diff.STATUS_SAME, "a.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_DIFFERENT, "b.txt", diff.KIND_FILE),
+        ]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["--json", "root", "/irods/xenium"])
+
+        assert exit_info.value.code == 1
+        assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [
+            {
+                "experiment": "experiment",
+                "collection": "/irods/xenium/XETG00000/0000000/experiment",
+                "status": "different",
+                "trigger": {
+                    "status": "different",
+                    "path": "b.txt",
+                    "kind": diff.KIND_FILE,
+                },
             }
         ]
 
@@ -219,7 +258,7 @@ class TestDiffXeniumScript:
         assert "Failed to read checksums file" in caplog.text
 
     @m.context("When any difference rows are produced")
-    @m.it("Exits non-zero after printing output")
+    @m.it("Exits non-zero after printing one aggregate row")
     @patch("npg_irods.cli.diff_xenium.iter_diff_directory", autospec=True)
     @patch("npg_irods.cli.diff_xenium.xenium_irods_partial_path", autospec=True)
     @patch("npg_irods.cli.diff_xenium.iter_output_directories", autospec=True)
@@ -235,9 +274,13 @@ class TestDiffXeniumScript:
         mock_xenium_irods_partial_path.return_value = PurePath(
             "XETG00000", "0000000", "experiment"
         )
-        mock_iter_diff_directory.return_value = [
-            diff.DiffRow(diff.STATUS_LOCAL, "a.txt", diff.KIND_FILE)
-        ]
+
+        def diff_rows():
+            yield diff.DiffRow(diff.STATUS_SAME, "a.txt", diff.KIND_FILE)
+            yield diff.DiffRow(diff.STATUS_LOCAL, "a", diff.KIND_DIRECTORY)
+            raise AssertionError("Rows after the first non-same row should not be read")
+
+        mock_iter_diff_directory.return_value = diff_rows()
 
         with pytest.raises(SystemExit) as exit_info:
             self._main(["root", "/irods/xenium"])
@@ -245,7 +288,7 @@ class TestDiffXeniumScript:
         assert exit_info.value.code == 1
         assert (
             capsys.readouterr().out
-            == "# experiment /irods/xenium/XETG00000/0000000/experiment\n> a.txt\n"
+            == "> experiment /irods/xenium/XETG00000/0000000/experiment directory a/\n"
         )
 
     @m.context("When one experiment cannot be mapped")
@@ -259,6 +302,7 @@ class TestDiffXeniumScript:
         mock_xenium_irods_partial_path: MagicMock,
         mock_iter_diff_directory: MagicMock,
         caplog,
+        capsys,
     ):
         bad = Path("bad")
         good = Path("good")
@@ -280,6 +324,38 @@ class TestDiffXeniumScript:
             local_checksum=None,
         )
         assert "Failed to map Xenium result directory" in caplog.text
+        assert (
+            capsys.readouterr().out
+            == "! bad - error bad metadata\n= good /irods/xenium/XETG00000/0000000/good\n"
+        )
+
+    @m.context("When diffing an output directory raises an error")
+    @m.it("Prints one aggregate error row")
+    @patch("npg_irods.cli.diff_xenium.iter_diff_directory", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.xenium_irods_partial_path", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.iter_output_directories", autospec=True)
+    def test_main_diff_failure(
+        self,
+        mock_iter_output_directories: MagicMock,
+        mock_xenium_irods_partial_path: MagicMock,
+        mock_iter_diff_directory: MagicMock,
+        capsys,
+    ):
+        experiment = Path("experiment")
+        mock_iter_output_directories.return_value = [experiment]
+        mock_xenium_irods_partial_path.return_value = PurePath(
+            "XETG00000", "0000000", "experiment"
+        )
+        mock_iter_diff_directory.side_effect = ValueError("bad diff")
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["root", "/irods/xenium"])
+
+        assert exit_info.value.code == 1
+        assert (
+            capsys.readouterr().out
+            == "! experiment /irods/xenium/XETG00000/0000000/experiment error bad diff\n"
+        )
 
     @staticmethod
     def _main(args: list[str]):
