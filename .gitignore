@@ -132,6 +132,9 @@ dmypy.json
 # The default iRODS auth file
 .irodsA
 
+# Local development-loop helper state
+.dev/
+
 # Docker tmp file mounts
 tests/tmp/
 

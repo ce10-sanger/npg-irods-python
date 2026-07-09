@@ -1,0 +1,40 @@
+services:
+  irods-clients:
+    platform: linux/amd64
+    container_name: irods-clients
+    image: "ghcr.io/wtsi-npg/ub-22.04-irods-clients-4.3.4:latest"
+    command: sleep infinity
+    restart: unless-stopped
+    environment:
+      IRODS_ENVIRONMENT_FILE: "${PWD}/.dev/irods_environment.json"
+      IRODS_PASSWORD: "irods"
+    volumes:
+      - "${PWD}:${PWD}"
+    working_dir: "${PWD}"
+    depends_on:
+      irods-server:
+        condition: service_healthy
+
+  app-dev:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: sleep infinity
+    restart: unless-stopped
+    environment:
+      IRODS_ENVIRONMENT_FILE: "/app/tests/.irods/irods_environment.json"
+      IRODS_PASSWORD: "irods"
+      NPG_IRODS_TEST_DB_SECTION: "docker"
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./scripts:/app/scripts
+      - ./pytest.ini:/app/pytest.ini
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./coverage:/coverage
+    depends_on:
+      irods-server:
+        condition: service_healthy
+      mysql-server:
+        condition: service_healthy

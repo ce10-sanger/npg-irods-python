@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+dev_dir="$repo_root/.dev"
+bin_dir="$dev_dir/bin"
+home_dir="$dev_dir/home"
+auth_file="$home_dir/.irods/.irodsA"
+env_file="$dev_dir/irods_environment.json"
+
+mkdir -p "$bin_dir" "$home_dir/.irods" coverage
+
+cat >"$env_file" <<EOF
+{
+    "irods_host": "irods-server",
+    "irods_port": 1247,
+    "irods_user_name": "irods",
+    "irods_zone_name": "testZone",
+    "irods_home": "/testZone/home/irods",
+    "irods_default_resource": "replResc",
+    "irods_default_hash_scheme": "MD5",
+    "irods_authentication_file": "$auth_file"
+}
+EOF
+
+clients=(
+    baton-do
+    baton-list
+    baton-metaquery
+    baton-put
+    baton-get
+    baton-chmod
+    baton-metamod
+    baton-rm
+    iadmin
+    ichmod
+    icp
+    ienv
+    iinit
+    ils
+    ilsresc
+    imkdir
+    iput
+    iquest
+    irm
+)
+
+for client in "${clients[@]}"; do
+    ln -sf "$repo_root/tests/bin/irods_client_wrapper.sh" "$bin_dir/$client"
+done
+
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
+    mysql-server irods-server irods-clients app-dev
+
+cat <<EOF
+Development test services are running.
+
+Host loop:
+  ./scripts/dev-test-host tests/test_diff.py
+
+Container loop:
+  ./scripts/dev-test-container tests/test_diff.py
+
+Stop services:
+  ./scripts/dev-test-down
+EOF

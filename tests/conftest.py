@@ -95,8 +95,16 @@ structlog.configure(
 
 
 TEST_INI = os.path.join(os.path.dirname(__file__), "testdb.ini")
+TEST_DB_SECTION_ENV = "NPG_IRODS_TEST_DB_SECTION"
 INI_SECTION_LOCAL = "docker"
 INI_SECTION_GITHUB = "github"
+
+
+def mlwh_config_section() -> str:
+    return os.environ.get(
+        TEST_DB_SECTION_ENV,
+        INI_SECTION_GITHUB if is_running_in_github_ci() else INI_SECTION_LOCAL,
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -122,9 +130,7 @@ def sql_test_utilities():
 def mlwh_session() -> Generator[Session, Any, None]:
     """Create an empty ML warehouse database fixture."""
 
-    section = INI_SECTION_GITHUB if is_running_in_github_ci() else INI_SECTION_LOCAL
-
-    dbconfig = IniData(db.Config).from_file(TEST_INI, section)
+    dbconfig = IniData(db.Config).from_file(TEST_INI, mlwh_config_section())
     engine = create_engine(dbconfig.url, echo=False)
 
     if database_exists(engine.url):

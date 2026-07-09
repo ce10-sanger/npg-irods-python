@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+dev_dir="$repo_root/.dev"
+bin_dir="$dev_dir/bin"
+home_dir="$dev_dir/home"
+venv_dir="${NPG_IRODS_DEV_VENV:-$repo_root/.venv}"
+ready_file="$venv_dir/.npg-irods-python-dev-ready"
+
+if [ ! -f "$dev_dir/irods_environment.json" ] || [ ! -x "$bin_dir/iinit" ]; then
+    "$repo_root/scripts/dev-test-up"
+fi
+
+if [ ! -x "$venv_dir/bin/python" ]; then
+    "${PYTHON:-python3}" -m venv "$venv_dir"
+fi
+
+if [ ! -f "$ready_file" ] || [ "${NPG_IRODS_DEV_SYNC:-0}" = "1" ]; then
+    "$venv_dir/bin/python" -m pip install --upgrade pip
+    "$venv_dir/bin/python" -m pip install -r requirements.txt
+    "$venv_dir/bin/python" -m pip install -r test-requirements.txt
+    "$venv_dir/bin/python" -m pip install -e .
+    touch "$ready_file"
+fi
+
+export PATH="$bin_dir:$PATH"
+export IRODS_ENVIRONMENT_FILE="$dev_dir/irods_environment.json"
+export IRODS_PASSWORD="${IRODS_PASSWORD:-irods}"
+export DOCKER_CONTAINER="${DOCKER_CONTAINER:-irods-clients}"
+export CLIENT_USER_HOME="$home_dir"
+export CLIENT_WORKDIR="$repo_root"
+export NPG_IRODS_TEST_DB_SECTION="${NPG_IRODS_TEST_DB_SECTION:-host}"
+
+exec "$venv_dir/bin/python" -m pytest --it "$@"

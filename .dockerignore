@@ -1,5 +1,9 @@
 .DS_Store
+.dev
+.envrc
+.venv
 .pytest_cache
+coverage
 build
 dist
 *.egg-info
