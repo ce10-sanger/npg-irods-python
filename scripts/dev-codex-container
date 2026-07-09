@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+mkdir -p coverage .dev/codex-home
+
+compose=(docker compose -f docker-compose.yml -f docker-compose.dev.yml)
+
+if [ "${NPG_IRODS_DEV_BUILD:-0}" = "1" ] || \
+   ! docker image inspect npg-irods-python-app-dev >/dev/null 2>&1; then
+    "${compose[@]}" build app-dev
+fi
+
+if [ "${NPG_IRODS_DEV_BUILD:-0}" = "1" ] || \
+   ! docker image inspect npg-irods-python-codex-dev >/dev/null 2>&1; then
+    "${compose[@]}" build codex-dev
+fi
+
+"${compose[@]}" up -d mysql-server irods-server codex-dev
+
+if [ "$#" -eq 0 ]; then
+    set -- --sandbox workspace-write --ask-for-approval on-request --cd /workspace
+fi
+
+exec "${compose[@]}" exec codex-dev codex "$@"

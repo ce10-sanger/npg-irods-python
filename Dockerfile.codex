@@ -1,0 +1,30 @@
+ARG APP_DEV_IMAGE=npg-irods-python-app-dev
+
+FROM ${APP_DEV_IMAGE}
+
+ARG CODEX_VERSION=0.143.0
+ARG CODEX_TARGET=x86_64-unknown-linux-musl
+ARG CODEX_SHA256=d9dc731dc66e227b175b13c071be9ea126cc7672fcac8a87823da50b0d2b2ffe
+
+USER root
+
+RUN apt-get update && \
+    apt-get install -q -y --no-install-recommends ripgrep && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL \
+        "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${CODEX_TARGET}.tar.gz" \
+        -o /tmp/codex.tar.gz && \
+    echo "${CODEX_SHA256}  /tmp/codex.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/codex.tar.gz -C /usr/local/bin "codex-${CODEX_TARGET}" && \
+    mv "/usr/local/bin/codex-${CODEX_TARGET}" /usr/local/bin/codex && \
+    chmod +x /usr/local/bin/codex && \
+    rm /tmp/codex.tar.gz
+
+ENV CODEX_HOME=/workspace/.dev/codex-home
+
+WORKDIR /workspace
+
+USER appuser
+
+CMD ["codex", "--sandbox", "workspace-write", "--ask-for-approval", "on-request", "--cd", "/workspace"]

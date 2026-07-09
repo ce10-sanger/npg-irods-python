@@ -17,6 +17,7 @@ services:
 
   app-dev:
     platform: linux/amd64
+    image: npg-irods-python-app-dev
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -33,6 +34,31 @@ services:
       - ./pytest.ini:/app/pytest.ini
       - ./pyproject.toml:/app/pyproject.toml
       - ./coverage:/coverage
+    depends_on:
+      irods-server:
+        condition: service_healthy
+      mysql-server:
+        condition: service_healthy
+
+  codex-dev:
+    platform: linux/amd64
+    image: npg-irods-python-codex-dev
+    build:
+      context: .
+      dockerfile: Dockerfile.codex
+      args:
+        APP_DEV_IMAGE: npg-irods-python-app-dev
+    command: sleep infinity
+    restart: unless-stopped
+    environment:
+      CODEX_HOME: "/workspace/.dev/codex-home"
+      IRODS_ENVIRONMENT_FILE: "/workspace/tests/.irods/irods_environment.json"
+      IRODS_PASSWORD: "irods"
+      NPG_IRODS_TEST_DB_SECTION: "docker"
+    volumes:
+      - .:/workspace
+      - ./coverage:/coverage
+    working_dir: /workspace
     depends_on:
       irods-server:
         condition: service_healthy

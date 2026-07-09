@@ -35,6 +35,32 @@ Pytest runs inside the long-lived `app-dev` container. The `src`, `tests`, and
 `scripts` directories are bind-mounted, so source edits are visible without
 rebuilding the image.
 
+## Run Codex in the app container
+
+```bash
+./scripts/dev-codex-container
+```
+
+Codex runs inside the `codex-dev` container with the repository mounted at
+`/workspace`. The container has the same Python, iRODS, Baton, and MySQL access
+as the container test loop, so Codex can run commands such as:
+
+```bash
+pytest --it tests/test_diff.py
+```
+
+By default, Codex runs with `--sandbox workspace-write --ask-for-approval
+on-request --cd /workspace`.
+
+The container uses a separate persisted Codex home at `.dev/codex-home`. Log in
+inside the container once with:
+
+```bash
+./scripts/dev-codex-container login
+```
+
+Set `NPG_IRODS_DEV_BUILD=1` to rebuild the app and Codex dev images.
+
 ## Stop services
 
 ```bash
