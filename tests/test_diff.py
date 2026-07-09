@@ -459,7 +459,7 @@ class TestDiffDirectoryScript:
         )
 
     @m.context("When any error rows are produced")
-    @m.it("Exits non-zero after printing all output")
+    @m.it("Exits with error status after printing all output")
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_error_status(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
@@ -470,11 +470,11 @@ class TestDiffDirectoryScript:
         with pytest.raises(SystemExit) as exit_info:
             self._main(["directory", "/collection"])
 
-        assert exit_info.value.code == 1
+        assert exit_info.value.code == diff.EXIT_ERROR
         assert capsys.readouterr().out == "! a.txt\n= b.txt\n"
 
     @m.context("When any difference rows are produced")
-    @m.it("Exits non-zero after printing all output")
+    @m.it("Exits with difference status after printing all output")
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_difference_status(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
@@ -485,11 +485,28 @@ class TestDiffDirectoryScript:
         with pytest.raises(SystemExit) as exit_info:
             self._main(["directory", "/collection"])
 
-        assert exit_info.value.code == 1
+        assert exit_info.value.code == diff.EXIT_DIFFERENCE
         assert capsys.readouterr().out == "> a.txt\n= b.txt\n"
 
+    @m.context("When both differences and errors are produced")
+    @m.it("Exits with error status after printing all output")
+    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
+    def test_main_error_takes_precedence(
+        self, mock_iter_diff_directory: MagicMock, capsys
+    ):
+        mock_iter_diff_directory.return_value = [
+            diff.DiffRow(diff.STATUS_LOCAL, "a.txt", diff.KIND_FILE),
+            diff.DiffRow(diff.STATUS_ERROR, "b.txt", diff.KIND_FILE),
+        ]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["directory", "/collection"])
+
+        assert exit_info.value.code == diff.EXIT_ERROR
+        assert capsys.readouterr().out == "> a.txt\n! b.txt\n"
+
     @m.context("When exit-on-difference is set")
-    @m.it("Exits after printing the first difference")
+    @m.it("Exits with difference status after printing the first difference")
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_exit_on_difference(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
@@ -500,11 +517,11 @@ class TestDiffDirectoryScript:
         with pytest.raises(SystemExit) as exit_info:
             self._main(["--exit-on-difference", "directory", "/collection"])
 
-        assert exit_info.value.code == 1
+        assert exit_info.value.code == diff.EXIT_DIFFERENCE
         assert capsys.readouterr().out == "> a.txt\n"
 
     @m.context("When exit-on-error is set")
-    @m.it("Exits after printing the first error")
+    @m.it("Exits with error status after printing the first error")
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
     def test_main_exit_on_error(self, mock_iter_diff_directory: MagicMock, capsys):
         mock_iter_diff_directory.return_value = [
@@ -515,8 +532,32 @@ class TestDiffDirectoryScript:
         with pytest.raises(SystemExit) as exit_info:
             self._main(["--exit-on-error", "directory", "/collection"])
 
-        assert exit_info.value.code == 1
+        assert exit_info.value.code == diff.EXIT_ERROR
         assert capsys.readouterr().out == "! a.txt\n"
+
+    @m.context("When diffing raises an exception")
+    @m.it("Exits with error status")
+    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
+    def test_main_diff_exception(self, mock_iter_diff_directory: MagicMock):
+        mock_iter_diff_directory.side_effect = ValueError("bad diff")
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["directory", "/collection"])
+
+        assert exit_info.value.code == diff.EXIT_ERROR
+
+    @m.context("When checksums file cannot be read")
+    @m.it("Exits with error status")
+    @patch("npg_irods.cli.diff_directory.make_get_checksum", autospec=True)
+    def test_main_checksums_file_exception(self, mock_make_get_checksum: MagicMock):
+        mock_make_get_checksum.side_effect = ValueError("bad checksums")
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(
+                ["--use-checksums-file", "checksums.md5", "directory", "/collection"]
+            )
+
+        assert exit_info.value.code == diff.EXIT_ERROR
 
     @staticmethod
     def _main(args: list[str]):

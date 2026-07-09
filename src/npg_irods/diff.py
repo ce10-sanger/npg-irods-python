@@ -43,6 +43,10 @@ STATUS_SYMBOLS = {
     STATUS_ERROR: "!",
 }
 
+EXIT_SAME = 0
+EXIT_DIFFERENCE = 1
+EXIT_ERROR = 2
+
 KIND_FILE = "file"
 KIND_DIRECTORY = "directory"
 KIND_ERROR = "error"

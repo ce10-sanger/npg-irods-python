@@ -28,6 +28,8 @@ from npg.log import configure_structlog
 from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.diff import (
     DIFFERENCE_STATUSES,
+    EXIT_DIFFERENCE,
+    EXIT_ERROR,
     KIND_DIRECTORY,
     STATUS_ERROR,
     STATUS_SYMBOLS,
@@ -49,6 +51,9 @@ status symbols are:
     !  path could not be compared because of an error
 
 With --json, status values are same, local_only, irods_only, different, or error.
+
+Exit status is 0 when all compared paths are the same, 1 when differences are
+found, and 2 when an error is encountered.
 """
 
 
@@ -136,7 +141,7 @@ def main():
     )
     parser.add_argument(
         "--exit-on-error",
-        help="Exit with status 1 after printing the first error.",
+        help="Exit with status 2 after printing the first error.",
         action="store_true",
     )
     parser.add_argument(
@@ -171,7 +176,7 @@ def main():
                 path=args.use_checksums_file,
                 error=str(e),
             )
-            raise e
+            sys.exit(EXIT_ERROR)
 
     filter_fn = (
         make_diff_filter(
@@ -211,11 +216,11 @@ def main():
             if row.status == STATUS_ERROR:
                 has_error = True
                 if args.exit_on_error:
-                    sys.exit(1)
+                    sys.exit(EXIT_ERROR)
             elif row.status in DIFFERENCE_STATUSES:
                 has_difference = True
                 if args.exit_on_difference:
-                    sys.exit(1)
+                    sys.exit(EXIT_DIFFERENCE)
     except Exception as e:
         logger().error(
             "Failed to diff directory",
@@ -223,10 +228,12 @@ def main():
             collection=args.collection,
             error=str(e),
         )
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
-    if has_error or has_difference:
-        sys.exit(1)
+    if has_error:
+        sys.exit(EXIT_ERROR)
+    if has_difference:
+        sys.exit(EXIT_DIFFERENCE)
 
 
 def _display_path(row):
