@@ -112,6 +112,14 @@ def main():
             )
             sys.exit(1)
 
+    def filter_item(item: Path):
+        """
+        Ignores macOS Finder metadata
+        Unlike publish-xenium-results, be more conservative and don't ignore
+        symbolic links and non-files/directories.
+        """
+        return item.name == ".DS_Store"
+
     has_non_same = False
 
     for experiment in iter_output_directories(local_root):
@@ -142,7 +150,7 @@ def main():
             trigger = None
             for row in iter_diff_directory(
                 experiment, collection, local_checksum=checksum_fn,
-                filter_fn=make_diff_filter(exclude_patterns=[".DS_Store"])
+                filter_fn=filter_item
             ):
                 if row.status != STATUS_SAME:
                     trigger = row
