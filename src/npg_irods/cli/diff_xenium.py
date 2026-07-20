@@ -33,7 +33,7 @@ from npg_irods.diff import (
     STATUS_SAME,
     STATUS_SYMBOLS,
     iter_diff_directory,
-    make_diff_filter,
+    make_diff_filter, DiffEntry,
 )
 from npg_irods.utilities import make_get_checksum, read_md5_file, sanitise_path
 from npg_irods.xenium import iter_output_directories, xenium_irods_partial_path
@@ -119,7 +119,6 @@ def main():
         Unlike publish-xenium-results, be more conservative and don't ignore
         symbolic links and non-files/directories.
         """
-        item.name
         return item.name == ".DS_Store"
 
     has_non_same = False

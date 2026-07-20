@@ -80,6 +80,10 @@ class DiffEntry:
 
         return str(checksum).lower()
 
+    @property
+    def name(self):
+        # TODO: Clean up
+        return PurePath(self.path).name
 
 @dataclass(frozen=True)
 class DiffRow:
