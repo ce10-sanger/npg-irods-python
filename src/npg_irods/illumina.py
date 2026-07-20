@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright © 2023, 2024 Genome Research Ltd. All rights reserved.
+# Copyright © 2023, 2024, 2026 Genome Research Ltd. All rights reserved.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,8 +24,9 @@ from datetime import datetime, timedelta
 from enum import Enum, unique
 from functools import lru_cache
 from pathlib import PurePath
-from typing import Any, Generator, Iterable, Iterator, Optional, Type
+from typing import Any, Generator, Iterable, Optional, Type
 
+from npgmlwarehouse.db.schema import IseqFlowcell, IseqProductMetrics, Sample, Study
 from partisan.irods import AVU, Collection, DataObject
 from partisan.metadata import AsValueEnum
 from sqlalchemy import and_, asc, not_, or_
@@ -33,13 +34,7 @@ from sqlalchemy.orm import Session
 from structlog import get_logger
 
 from npg_irods.common import infer_zone, update_metadata, update_permissions
-from npg_irods.db.mlwh import (
-    IseqFlowcell,
-    IseqProductMetrics,
-    SQL_CHUNK_SIZE,
-    Sample,
-    Study,
-)
+from npg_irods.db.mlwh import SQL_CHUNK_SIZE
 from npg_irods.exception import CollectionNotFound, DataObjectNotFound
 from npg_irods.metadata.common import SeqConcept, SeqSubset
 from npg_irods.metadata.illumina import Instrument

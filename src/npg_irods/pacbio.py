@@ -22,15 +22,16 @@
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import PurePath
-from typing import Any, Generator, Iterable, Iterator, Optional, Type
+from typing import Any, Generator, Iterable, Optional, Type
 
+from npgmlwarehouse.db.schema import PacBioRun, Sample, Study
 from partisan.irods import AVU, Collection, DataObject
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from structlog import get_logger
 
 from npg_irods.common import infer_zone, update_metadata, update_permissions
-from npg_irods.db.mlwh import PacBioRun, SQL_CHUNK_SIZE, Sample, Study
+from npg_irods.db.mlwh import SQL_CHUNK_SIZE
 from npg_irods.exception import DataObjectNotFound
 from npg_irods.metadata.common import SeqConcept, SeqSubset
 from npg_irods.metadata.lims import (
@@ -275,7 +276,6 @@ def find_updated_components(
     Returns:
         A generator over Components whose tracking metadata have changed.
     """
-
     if (
         changed_sample_ids is not None
         and changed_study_ids is not None

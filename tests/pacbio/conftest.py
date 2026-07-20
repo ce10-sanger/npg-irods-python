@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright © 2024 Genome Research Ltd. All rights reserved.
+# Copyright © 2024, 2026 Genome Research Ltd. All rights reserved.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,6 +22,13 @@ from typing import Any, Generator
 
 import pytest
 from npg_id_generation.pac_bio import PacBioEntity
+from npgmlwarehouse.db.schema import (
+    PacBioProductMetrics,
+    PacBioRun,
+    PacBioRunWellMetrics,
+    Sample,
+    Study,
+)
 from partisan.icommands import iput
 from partisan.irods import AVU, Collection, DataObject
 from sqlalchemy.orm import Session
@@ -36,13 +43,6 @@ from helpers import (
 )
 from npg_irods.metadata.common import SeqConcept
 from npg_irods.metadata.pacbio import Instrument, remove_well_padding
-from npg_irods.db.mlwh import (
-    PacBioProductMetrics,
-    PacBioRun,
-    PacBioRunWellMetrics,
-    Sample,
-    Study,
-)
 
 
 def make_product_id(run: str, well: str, plate=None, tag=None):
@@ -131,17 +131,23 @@ def make_pacbio_fixture(session, num_runs=2, num_wells=2, num_tags=2, is_revio=T
 
                     plate_number = p if is_revio else None
                     run = PacBioRun(
+                        cost_code="dummy_cost_code",
                         id_lims=id_lims,
+                        id_pac_bio_run_lims=f"id_run_lims{r}",
+                        last_updated=when,
+                        pac_bio_library_tube_id_lims="dummy_library_tube_id_lims",
+                        pac_bio_library_tube_name="dummy_library_tube_name",
+                        pac_bio_library_tube_uuid="dummy_library_tube_uuid",
+                        pac_bio_run_name=f"run{r}",
+                        plate_number=plate_number,
+                        plate_uuid_lims="dummy_plate_uuid_lims",
+                        recorded_at=when,
                         sample=sample,
                         study=study_x,
-                        id_pac_bio_run_lims=f"id_run_lims{r}",
-                        pac_bio_run_name=f"run{r}",
-                        well_label=f"A{w}",  # Well label x-coordinates are unpadded
-                        plate_number=plate_number,
                         tag_identifier=tag_id,
                         tag_sequence=tag_seq,
-                        last_updated=when,
-                        recorded_at=when,
+                        well_label=f"A{w}",  # Well label x-coordinates are unpadded
+                        well_uuid_lims="dummy_well_uuid_lims",
                     )
                     runs.append(run)
 
@@ -155,27 +161,28 @@ def make_pacbio_fixture(session, num_runs=2, num_wells=2, num_tags=2, is_revio=T
         # because the database has a unique constraint on these columns.
         if key not in rmw_added:
             rwm = PacBioRunWellMetrics(
-                pac_bio_run_name=run.pac_bio_run_name,
-                well_label=run.well_label,
-                plate_number=run.plate_number,
+                instrument_type="dummy_instrument",
                 id_pac_bio_product=make_product_id(
                     run.pac_bio_run_name,
                     run.well_label,
                     run.plate_number,
                 ),  # Well product ID
                 last_changed=LATE,
+                pac_bio_run_name=run.pac_bio_run_name,
+                plate_number=run.plate_number,
+                well_label=run.well_label,
             )
             rmw_added[key] = rwm
             session.add(rwm)
 
         pm = PacBioProductMetrics(
-            pac_bio_run=run,
-            pac_bio_run_well_metrics=rmw_added[key],
             id_pac_bio_product=make_product_id(
                 run.pac_bio_run_name, run.well_label, run.plate_number, run.tag_sequence
             ),  # Tag product ID
-            qc=True,
             last_changed=LATE,
+            pac_bio_run=run,
+            pac_bio_run_well_metrics=rmw_added[key],
+            qc=True,
         )
         session.add(pm)
     session.commit()

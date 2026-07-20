@@ -1,11 +1,12 @@
-cryptography==48.0.0
+cryptography==49.0.0
 npg_id_generation@https://github.com/wtsi-npg/npg_id_generation/releases/download/5.0.1/npg_id_generation-5.0.1.tar.gz
 npg-python-lib@https://github.com/wtsi-npg/npg-python-lib/releases/download/2.0.0/npg_python_lib-2.0.0.tar.gz
+npgmlwarehouse-python @ git+https://github.com/wtsi-npg/npgmlwarehouse-python.git@1.1.1
 partisan@https://github.com/wtsi-npg/partisan/releases/download/4.3.5/partisan-4.3.5.tar.gz
-pymysql==1.1.2
+pymysql==1.2.0
 python-dateutil==2.9.0.post0
 setuptools-git-versioning==3.1.0
-setuptools==82.0.1
-sqlalchemy==2.0.49
-structlog==25.5.0
+setuptools==83.0.0
+sqlalchemy==2.0.50
+structlog==26.1.0
 yattag==1.16.1

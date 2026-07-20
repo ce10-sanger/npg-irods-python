@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright © 2023 Genome Research Ltd. All rights reserved.
+# Copyright © 2023, 2026 Genome Research Ltd. All rights reserved.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,10 +21,11 @@
 import argparse
 import logging
 import structlog
+from npg.cli import add_logging_arguments
+from npg.log import configure_structlog
 
-from npg_irods.cli.util import configure_logging, add_logging_arguments
+from npg_irods import version
 from npg_irods.metadata.pacbio import backfill_id_products
-from npg_irods.version import version
 
 description = """
 Recursively adds id_product metadata under the specified iRODS paths if 
@@ -70,7 +71,7 @@ parser.add_argument(
 parser.add_argument("--version", help="Version of the module", action="store_true")
 
 args = parser.parse_args()
-configure_logging(
+configure_structlog(
     config_file=args.log_config,
     debug=args.debug,
     verbose=args.verbose,
@@ -88,23 +89,6 @@ logging.basicConfig(
     level=level,
     encoding="utf-8",
 )
-
-log_processors = [
-    structlog.stdlib.add_logger_name,
-    structlog.stdlib.add_log_level,
-    structlog.processors.TimeStamper(fmt="iso", utc=True),
-]
-if args.json:
-    log_processors.append(structlog.processors.JSONRenderer())
-else:
-    log_processors.append(structlog.dev.ConsoleRenderer(colors=args.colour))
-
-structlog.configure(
-    processors=log_processors,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    cache_logger_on_first_use=True,
-)
-
 log = structlog.get_logger("main")
 
 

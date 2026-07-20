@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePath
 from typing import Any, Generator
 
+import npgmlwarehouse.db.schema
 import pytest
 import structlog
 from npg.conf import IniData
@@ -137,7 +138,7 @@ def mlwh_session() -> Generator[Session, Any, None]:
         conn.execute(text("SET sql_mode = '';"))
         conn.commit()
 
-    mlwh.Base.metadata.create_all(engine)
+    npgmlwarehouse.db.schema.Base.metadata.create_all(engine)
     session_maker = sessionmaker(bind=engine)
     sess: Session = session_maker()
 

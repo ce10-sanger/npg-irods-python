@@ -28,6 +28,7 @@ from os import PathLike
 from pathlib import PurePath
 from typing import Any, Generator, Iterable, Optional, Type
 
+from npgmlwarehouse.db.schema import OseqFlowcell, Sample, Study
 from partisan.exception import RodsError
 from partisan.icommands import iquest
 from partisan.irods import AVU, Collection, DataObject, query_metadata
@@ -36,7 +37,7 @@ from sqlalchemy.orm import Session
 from structlog import get_logger
 
 from npg_irods.common import infer_zone, update_metadata, update_permissions
-from npg_irods.db.mlwh import OseqFlowcell, SQL_CHUNK_SIZE, Sample, Study
+from npg_irods.db.mlwh import SQL_CHUNK_SIZE
 from npg_irods.metadata.common import SeqConcept
 from npg_irods.metadata.lims import (
     ensure_consent_withdrawn,
@@ -322,13 +323,21 @@ def requires_managed_access(obj: DataObject) -> bool:
     if any(suffix in managed for suffix in suffixes):
         return True
 
+    known_safe = [
+        "barcode_alignment_",
+        "final_summary_",
+        "output_hash_",
+        "pore_",
+        "report_",
+        "sample_sheet_",
+        "temperature_",
+        "throughput_",
+    ]
+
     name = p.name.casefold()
-    if (
-        name.startswith("report_")
-        or name.startswith("final_summary_")
-        or name.startswith("sample_sheet_")
-    ):
-        return False
+    for prefix in known_safe:
+        if name.startswith(prefix):
+            return False
 
     return True
 

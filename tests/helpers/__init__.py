@@ -23,8 +23,8 @@ import os
 import subprocess
 from collections import deque
 from datetime import datetime
-from pathlib import PurePath
 from os import PathLike
+from pathlib import PurePath
 from typing import Iterator
 
 import pytest
@@ -32,9 +32,7 @@ from partisan.exception import RodsError
 from partisan.icommands import (
     add_specific_sql,
     have_admin,
-    imkdir,
     iquest,
-    irm,
     mkgroup,
     remove_specific_sql,
     rmgroup,

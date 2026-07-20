@@ -22,6 +22,7 @@ from pathlib import PurePath
 from typing import Any, Generator
 
 import pytest
+from npgmlwarehouse.db.schema import OseqFlowcell, Sample, Study
 from partisan.irods import AVU, Collection
 from sqlalchemy.orm import Session
 
@@ -33,7 +34,6 @@ from helpers import (
     LATEST,
     consume,
 )
-from npg_irods.db.mlwh import OseqFlowcell, Sample, Study
 from npg_irods.metadata import ont
 
 # Counts of test fixture experiments
@@ -128,7 +128,6 @@ def initialize_mlwh_ont_synthetic(session: Session, ont_barcodes):
         """Make a multiplexed flowcell given an experiment name, experiment number,
         flowcell start idx, instrument slot, tag identifier, barcode and sample index.
         """
-
         when = EARLY  # All the even experiments have the early datetime
         if ex_n % 2 == 1:
             when = LATE  # All the odd experiments have the late datetime

@@ -26,11 +26,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from npgmlwarehouse.db.schema import Sample, Study
 from sqlalchemy import asc, select
 from sqlalchemy.orm import Session
 from structlog import get_logger
 
-from npg_irods.db.mlwh import Sample, Study, find_updated_samples, find_updated_studies
+
+from npg_irods.db.mlwh import find_updated_samples, find_updated_studies
 
 
 def logger():

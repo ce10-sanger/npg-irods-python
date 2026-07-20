@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright © 2024 Genome Research Ltd. All rights reserved.
+# Copyright © 2024, 2026 Genome Research Ltd. All rights reserved.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,6 +21,13 @@ from pathlib import PurePath
 from typing import Any, Generator
 
 import pytest
+from npgmlwarehouse.db.schema import (
+    IseqFlowcell,
+    IseqProductMetrics,
+    IseqRunLaneMetrics,
+    Sample,
+    Study,
+)
 from partisan.icommands import iput
 from partisan.irods import AVU, Collection, DataObject
 from sqlalchemy.orm import Session
@@ -32,7 +39,6 @@ from helpers import (
     add_rods_path,
     remove_rods_path,
 )
-from npg_irods.db.mlwh import IseqFlowcell, IseqProductMetrics, Sample, Study
 from npg_irods.illumina import EntityType
 from npg_irods.metadata import illumina
 from npg_irods.metadata.common import SeqConcept
@@ -43,13 +49,17 @@ def initialize_mlwh_illumina_synthetic(session: Session):
 
     This is represented by the files in ./tests/data/illumina/synthetic
     """
-
     default_timestamps = {
         "created": CREATED,
         "last_updated": BEGIN,
         "recorded_at": BEGIN,
     }
     default_run = 12345
+    positions = (1, 2)
+
+    session.add_all(
+        IseqRunLaneMetrics(id_run=default_run, position=p, cycles=1) for p in positions
+    )
 
     study_a = Study(
         id_lims="LIMS_01", id_study_lims="4000", name="Study A", **default_timestamps
@@ -197,6 +207,12 @@ def initialize_mlwh_illumina_synthetic(session: Session):
 
 def initialize_mlwh_illumina_backfill(sess: Session):
     """Insert ML warehouse test data for Illumina product iRODS paths."""
+    default_run = 12111
+    positions = (1, 2)
+
+    sess.add_all(
+        IseqRunLaneMetrics(id_run=default_run, position=p, cycles=1) for p in positions
+    )
 
     changed_study = Study(
         id_lims="LIMS_05",
@@ -336,28 +352,28 @@ def initialize_mlwh_illumina_backfill(sess: Session):
 
     study_changed_product_metrics = IseqProductMetrics(
         id_iseq_product="PRODUCT_01",
-        id_run=12111,
+        id_run=default_run,
         last_changed=BEGIN,
         id_iseq_flowcell_tmp=study_changed_flowcell.id_iseq_flowcell_tmp,
         qc=0,
     )
     sample_changed_product_metrics = IseqProductMetrics(
         id_iseq_product="PRODUCT_02",
-        id_run=12111,
+        id_run=default_run,
         last_changed=BEGIN,
         id_iseq_flowcell_tmp=sample_changed_flowcell.id_iseq_flowcell_tmp,
         qc=0,
     )
     flowcell_changed_product_metrics = IseqProductMetrics(
         id_iseq_product="PRODUCT_03",
-        id_run=12111,
+        id_run=default_run,
         last_changed=BEGIN,
         id_iseq_flowcell_tmp=self_changed_flowcell.id_iseq_flowcell_tmp,
         qc=0,
     )
     self_changed_product_metrics = IseqProductMetrics(
         id_iseq_product="PRODUCT_04",
-        id_run=12111,
+        id_run=default_run,
         last_changed=LATEST,
         id_iseq_flowcell_tmp=product_changed_flowcell.id_iseq_flowcell_tmp,
         qc=0,
@@ -365,7 +381,7 @@ def initialize_mlwh_illumina_backfill(sess: Session):
 
     no_change_product_metrics = IseqProductMetrics(
         id_iseq_product="PRODUCT_05",
-        id_run=12111,
+        id_run=default_run,
         last_changed=BEGIN,
         id_iseq_flowcell_tmp=no_change_flowcell.id_iseq_flowcell_tmp,
         qc=0,
@@ -385,7 +401,6 @@ def initialize_mlwh_illumina_backfill(sess: Session):
 @pytest.fixture(scope="function")
 def illumina_synthetic_mlwh(mlwh_session) -> Generator[Session, Any, None]:
     """An ML warehouse database fixture populated with Illumina-related records."""
-
     initialize_mlwh_illumina_synthetic(mlwh_session)
     yield mlwh_session
 
@@ -394,7 +409,6 @@ def illumina_synthetic_mlwh(mlwh_session) -> Generator[Session, Any, None]:
 def illumina_backfill_mlwh(mlwh_session) -> Generator[Session, Any, None]:
     """An ML warehouse database fixture populated with Illumina iRODS path backfill
     records."""
-
     initialize_mlwh_illumina_backfill(mlwh_session)
     yield mlwh_session
 
