@@ -269,6 +269,18 @@ class TestDirectoryDiff:
 
         assert rows_as_tuples(rows) == [(diff.STATUS_LOCAL, "keep.txt")]
 
+    @m.context("With the documented macOS metadata exclude filter")
+    @m.it("Skips exact DS_Store filenames at any depth")
+    def test_diff_directory_ds_store_exclude_filter(self):
+        filter_fn = diff.make_diff_filter(
+            exclude_patterns=[r"(^|/)\.DS_Store$"]
+        )
+
+        assert filter_fn(file_entry(".DS_Store")) is True
+        assert filter_fn(file_entry("nested/.DS_Store")) is True
+        assert filter_fn(file_entry(".DS_Store.backup")) is False
+        assert filter_fn(file_entry("my.DS_Store")) is False
+
     @m.context("With include and exclude filters")
     @m.it("Applies exclude filters after include filters")
     @patch("npg_irods.diff.rods_path_type", return_value=None)
@@ -376,6 +388,18 @@ class TestDirectoryDiff:
 
 @m.describe("Diff directory script")
 class TestDiffDirectoryScript:
+    @m.context("When help is requested")
+    @m.it("Shows how to exclude macOS Finder metadata")
+    def test_main_help_ds_store_example(self, capsys):
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["--help"])
+
+        assert exit_info.value.code == 0
+        assert (
+            "diff-directory --exclude '(^|/)\\.DS_Store$' DIRECTORY COLLECTION"
+            in capsys.readouterr().out
+        )
+
     @m.context("When run with default parameters")
     @m.it("Prints plain text diff rows")
     @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)

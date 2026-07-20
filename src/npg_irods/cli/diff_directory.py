@@ -54,6 +54,12 @@ With --json, status values are same, local_only, irods_only, different, or error
 
 Exit status is 0 when all compared paths are the same, 1 when differences are
 found, and 2 when an error is encountered.
+
+Examples:
+
+Exclude macOS Finder metadata files at any depth:
+
+    diff-directory --exclude '(^|/)\\.DS_Store$' DIRECTORY COLLECTION
 """
 
 
