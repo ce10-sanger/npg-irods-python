@@ -32,7 +32,7 @@ from npg_irods.diff import (
     STATUS_ERROR,
     STATUS_SAME,
     STATUS_SYMBOLS,
-    iter_diff_directory,
+    iter_diff_directory, make_diff_filter,
 )
 from npg_irods.utilities import make_get_checksum, read_md5_file, sanitise_path
 from npg_irods.xenium import iter_output_directories, xenium_irods_partial_path
@@ -141,7 +141,8 @@ def main():
         try:
             trigger = None
             for row in iter_diff_directory(
-                experiment, collection, local_checksum=checksum_fn
+                experiment, collection, local_checksum=checksum_fn,
+                filter_fn=make_diff_filter(exclude_patterns=[".DS_Store"])
             ):
                 if row.status != STATUS_SAME:
                     trigger = row
