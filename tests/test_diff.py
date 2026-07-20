@@ -272,9 +272,7 @@ class TestDirectoryDiff:
     @m.context("With the documented macOS metadata exclude filter")
     @m.it("Skips exact DS_Store filenames at any depth")
     def test_diff_directory_ds_store_exclude_filter(self):
-        filter_fn = diff.make_diff_filter(
-            exclude_patterns=[r"(^|/)\.DS_Store$"]
-        )
+        filter_fn = diff.make_diff_filter(exclude_patterns=[r"(^|/)\.DS_Store$"])
 
         assert filter_fn(file_entry(".DS_Store")) is True
         assert filter_fn(file_entry("nested/.DS_Store")) is True

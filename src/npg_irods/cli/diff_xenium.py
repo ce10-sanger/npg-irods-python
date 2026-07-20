@@ -32,7 +32,8 @@ from npg_irods.diff import (
     STATUS_ERROR,
     STATUS_SAME,
     STATUS_SYMBOLS,
-    iter_diff_directory, make_diff_filter,
+    iter_diff_directory,
+    make_diff_filter,
 )
 from npg_irods.utilities import make_get_checksum, read_md5_file, sanitise_path
 from npg_irods.xenium import iter_output_directories, xenium_irods_partial_path
@@ -112,12 +113,13 @@ def main():
             )
             sys.exit(1)
 
-    def filter_item(item: Path):
+    def filter_item(item: DiffEntry):
         """
         Ignores macOS Finder metadata
         Unlike publish-xenium-results, be more conservative and don't ignore
         symbolic links and non-files/directories.
         """
+        item.name
         return item.name == ".DS_Store"
 
     has_non_same = False
@@ -149,8 +151,10 @@ def main():
         try:
             trigger = None
             for row in iter_diff_directory(
-                experiment, collection, local_checksum=checksum_fn,
-                filter_fn=filter_item
+                experiment,
+                collection,
+                local_checksum=checksum_fn,
+                filter_fn=filter_item,
             ):
                 if row.status != STATUS_SAME:
                     trigger = row
