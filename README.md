@@ -39,14 +39,14 @@ docker pull ghcr.io/wtsi-npg/npg-irods-python:1.1.0
 
 ### Running tests
 
-#### Running directly on your local machine
+#### Running directly in a configured environment
 
-To run the tests locally, you will need to have the `irods` clients installed (`icommands`
-and `baton`, which means your local machine must be either be running Linux, or have
-containerised versions of these tools installed and runnable via proxy wrappers of the
-same name, to emulate the Linux environment.
+To run the tests directly, you will need to have the `irods` clients installed
+(`icommands` and `baton`). The environment must either be Linux or provide
+containerised clients through proxy wrappers with the same command names.
 
-You will also need to have a working iRODS server to connect to.
+You will also need working iRODS and MySQL servers with the test configuration
+expected by the repository.
 
 With this in place, you can run the tests with the following command:
 
@@ -54,20 +54,24 @@ With this in place, you can run the tests with the following command:
 
 #### Running in a container
 
-The tests can be run in a container, which requires less setup and will be less likely
-to be affected by your local environment. A Docker Compose file is provided to run the
-tests in a Linux container, against containerised iRODS and MySQL servers.
+Docker Compose is the recommended option when the host does not already have the
+test infrastructure. It runs the tests in Linux and starts the required iRODS and
+MySQL services.
 
 To run the tests in a container, you will need to have Docker installed.
 
-With this in place, you can run the tests with the following command:
+Run the full test suite with:
 
-    docker compose run app pytest --it
+    docker compose run --build --rm app pytest --it
 
-There will be a delay the first time this is run because the Docker image will be built.
-To pre-build the image, you can run:
+To run a focused test file or pass other pytest arguments, append them after
+`--it`. For example:
 
-    docker compose build
+    docker compose run --build --rm app pytest --it tests/test_diff.py
+
+The first run will take longer while Docker builds the application image and pulls
+the service images. Keep `--build` after source changes because the source tree is
+copied into the application image rather than bind-mounted.
 
 ## Creating a release
 
