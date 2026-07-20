@@ -27,7 +27,6 @@ from pytest import mark as m, raises
 from helpers import (
     LATEST,
     history_in_meta,
-    remove_rods_path,
     tests_have_admin,
 )
 from npg_irods import ont
@@ -45,15 +44,18 @@ from npg_irods.ont import (
     barcode_collections,
     ensure_secondary_metadata_updated,
     is_minknow_report,
+    requires_managed_access,
 )
 from ont.conftest import ont_tag_identifier
 
 
 class TestONTFindUpdates:
     @tests_have_admin
-    @m.context("When an ONT metadata update is requested")
-    @m.context("When no experiment name is specified")
-    @m.context("When no time window is specified")
+    @m.context(
+        "When an ONT metadata update is requested and "
+        "no experiment name is specified, and "
+        "no time window is specified"
+    )
     @m.it("Finds all collections")
     def test_find_all(self, ont_synthetic_irods, ont_synthetic_mlwh):
         num_simple_expts = 5
@@ -75,9 +77,11 @@ class TestONTFindUpdates:
         assert num_updated == num_expected
         assert num_errors == 0
 
-    @m.context("When an ONT metadata update is requested")
-    @m.context("When no experiment name is specified")
-    @m.context("When a time window is specified")
+    @m.context(
+        "When an ONT metadata update is requested and "
+        "no experiment name is specified, and "
+        "a time window is specified"
+    )
     @m.it("Finds only collections updated in that time window")
     def test_find_recent_updates(self, ont_synthetic_irods, ont_synthetic_mlwh):
         num_found, num_updated, num_errors = apply_metadata(
@@ -108,8 +112,10 @@ class TestONTFindUpdates:
         assert num_updated == num_expected
         assert num_errors == 0
 
-    @m.context("When an ONT metadata update is requested")
-    @m.context("When an experiment name is specified")
+    @m.context(
+        "When an ONT metadata update is requested and "
+        "an experiment name is specified"
+    )
     @m.it("Finds only collections with that experiment name")
     def test_find_updates_for_experiment(self, ont_synthetic_irods, ont_synthetic_mlwh):
         expt = "simple_experiment_001"
@@ -137,9 +143,11 @@ class TestONTFindUpdates:
         assert num_updated == num_expected
         assert num_errors == 0
 
-    @m.context("When an ONT metadata update is requested")
-    @m.context("When an experiment name is specified")
-    @m.context("When a slot position is specified")
+    @m.context(
+        "When an ONT metadata update is requested and "
+        "an experiment name is specified and, "
+        "a slot position is specified"
+    )
     @m.it("Finds only collections with that experiment name and slot position")
     def test_find_updates_for_experiment_slot(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -168,8 +176,10 @@ class TestONTFindUpdates:
 
 class TestONTMetadataCreation(object):
     @tests_have_admin
-    @m.context("When an ONT experiment collection is annotated")
-    @m.context("When the experiment is single-sample")
+    @m.context(
+        "When an ONT experiment collection is annotated and "
+        "the experiment is single-sample"
+    )
     @m.it("Adds sample and study metadata to the run-folder collection")
     def test_add_new_sample_metadata(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -212,8 +222,10 @@ class TestONTMetadataCreation(object):
             assert item.acl() == expected_acl, f"ACL of {item} is {expected_acl}"
 
     @tests_have_admin
-    @m.context("When an ONT experiment collection is annotated")
-    @m.context("When the experiment is multiplexed")
+    @m.context(
+        "When an ONT experiment collection is annotated and "
+        "the experiment is multiplexed"
+    )
     @m.it("Adds {tag_index_from_id => <n>} metadata to barcode<0n> sub-collections")
     def test_add_new_plex_metadata(
         self, ont_multiplexed_experiment_001_slot_1, ont_synthetic_mlwh, ont_barcodes
@@ -240,8 +252,10 @@ class TestONTMetadataCreation(object):
                 assert avu in bc_coll.metadata(), f"{avu} is in {bc_coll} metadata"
 
     @tests_have_admin
-    @m.context("When an ONT experiment collection is annotated")
-    @m.context("When the experiment is multiplexed")
+    @m.context(
+        "When an ONT experiment collection is annotated and "
+        "the experiment is multiplexed"
+    )
     @m.it("Adds sample and study metadata to barcode<0n> sub-collections")
     def test_add_new_plex_sample_metadata(
         self,
@@ -296,8 +310,10 @@ class TestONTMetadataCreation(object):
                     assert item.acl() == expected_acl
 
     @tests_have_admin
-    @m.context("When ONT experiment collections of rebasecalled data are annotated")
-    @m.context("When experiments are multiplexed")
+    @m.context(
+        "When ONT experiment collections of rebasecalled data are annotated and "
+        "experiments are multiplexed"
+    )
     @m.it("Adds tag_index, sample and study metadata to barcode<0n> sub-collections")
     def test_add_new_plex_metadata_on_rebasecalled(
         self, ont_synthetic_irods, ont_synthetic_mlwh, ont_smallset_barcodes
@@ -370,8 +386,7 @@ class TestONTMetadataCreation(object):
 
 
 class TestONTMetadataUpdate(object):
-    @m.context("When ONT metadata are applied")
-    @m.context("When the metadata are absent")
+    @m.context("When ONT metadata are applied and " "the metadata are absent")
     @m.it("Adds the metadata")
     def test_updates_absent_metadata(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -397,8 +412,9 @@ class TestONTMetadataUpdate(object):
         assert num_updated == 1
         assert num_errors == 0
 
-    @m.context("When ONT metadata are applied")
-    @m.context("When correct metadata are already present")
+    @m.context(
+        "When ONT metadata are applied and " "correct metadata are already present"
+    )
     @m.it("Leaves the metadata unchanged")
     def test_updates_present_metadata(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -423,8 +439,7 @@ class TestONTMetadataUpdate(object):
         assert num_updated == 1
         assert num_errors == 0
 
-    @m.context("When ONT metadata are applied")
-    @m.context("When incorrect metadata are present")
+    @m.context("When ONT metadata are applied and " "incorrect metadata are present")
     @m.it("Changes the metadata and adds history metadata")
     def test_updates_changed_metadata(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -453,8 +468,10 @@ class TestONTMetadataUpdate(object):
         assert num_updated == 1
         assert num_errors == 0
 
-    @m.context("When ONT metadata are applied")
-    @m.context("When an attribute has multiple incorrect values")
+    @m.context(
+        "When ONT metadata are applied and "
+        "an attribute has multiple incorrect values"
+    )
     @m.it("Groups those values in the history metadata")
     def test_updates_multiple_metadata(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -489,8 +506,10 @@ class TestONTMetadataUpdate(object):
         assert num_updated == 1
         assert num_errors == 0
 
-    @m.context("When ONT metadata are updated")
-    @m.context("When an iRODS path has metadata identifying its run component")
+    @m.context(
+        "When ONT metadata are updated and "
+        "an iRODS path has metadata identifying its run component"
+    )
     @m.it("Updates the metadata")
     def test_updates_annotated_collection(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -512,8 +531,10 @@ class TestONTMetadataUpdate(object):
         assert ensure_secondary_metadata_updated(coll, mlwh_session=ont_synthetic_mlwh)
         assert AVU(TrackedSample.NAME, "name1") in coll.metadata()
 
-    @m.context("When rebasecalled ONT metadata are updated")
-    @m.context("When an iRODS path has metadata identifying its run component")
+    @m.context(
+        "When rebasecalled ONT metadata are updated and "
+        "an iRODS path has metadata identifying its run component"
+    )
     @m.it("Updates the metadata")
     def test_updates_rebasecalled_annotated_collection(
         self, ont_synthetic_irods, ont_synthetic_mlwh, ont_smallset_barcodes
@@ -578,9 +599,72 @@ class TestONTMetadataUpdate(object):
 
 
 class TestONTPermissionsUpdate:
+    @m.context(
+        "When checking whether ONT data objects require managed access and "
+        "the file name has a managed sequence-data suffix"
+    )
+    @m.it("Requires managed access")
+    @m.parametrize(
+        "name",
+        [
+            "reads.bam",
+            "regions.bed",
+            "reads.fast5",
+            "reads.fastq",
+            "reads.fastq.gz",
+            "signals.pod5",
+            "SIGNALS.FAST5",
+        ],
+    )
+    def test_requires_managed_access_for_sequence_data_suffixes(
+        self, empty_collection_path, name: str
+    ):
+        obj = DataObject(empty_collection_path / name).put(
+            "./tests/data/simple/data_object/lorem.txt", verify_checksum=True
+        )
+        assert requires_managed_access(obj)
+
+    @m.context(
+        "When checking whether ONT data objects require managed access and "
+        "the file is a sequencing summary"
+    )
+    @m.it("Requires managed access")
+    def test_requires_managed_access_for_sequencing_summary(
+        self, empty_collection_path
+    ):
+        obj = DataObject(empty_collection_path / "sequencing_summary.txt").put(
+            "./tests/data/simple/data_object/lorem.txt", verify_checksum=True
+        )
+        assert requires_managed_access(obj)
+
+    @m.context(
+        "When checking whether ONT data objects require managed access and "
+        "the file name has a known safe prefix"
+    )
+    @m.it("Does not require managed access")
+    @m.parametrize(
+        "name",
+        [
+            "barcode_alignment_summary.txt",
+            "final_summary_flowcell011_69126024.txt",
+            "output_hash_report.txt",
+            "pore_activity.csv",
+            "report_flowcell011_69126024.md",
+            "sample_sheet_flowcell011.csv",
+            "temperature_flowcell011.csv",
+            "throughput_flowcell011.csv",
+        ],
+    )
+    def test_requires_managed_access_false_for_known_safe_prefixes(
+        self, empty_collection_path, name: str
+    ):
+        obj = DataObject(empty_collection_path / name).put(
+            "./tests/data/simple/data_object/lorem.txt", verify_checksum=True
+        )
+        assert not requires_managed_access(obj)
+
     @tests_have_admin
-    @m.context("When ONT permissions are updated")
-    @m.context("When the experiment is multiplexed")
+    @m.context("When ONT permissions are updated and " "the experiment is multiplexed")
     @m.it("Makes report files publicly readable")
     def test_public_read_reports(
         self, ont_multiplexed_experiment_001_slot_1, ont_synthetic_mlwh
@@ -608,9 +692,11 @@ class TestONTPermissionsUpdate:
                 == expected_acl
             )
 
-    @m.context("When ONT permissions are updated")
-    @m.context("When the experiment is single-sample")
-    @m.context("When permissions are absent")
+    @m.context(
+        "When ONT permissions are updated and "
+        "the experiment is single-sample, and "
+        "permissions are absent"
+    )
     @m.it("Add study-specific permissions")
     def test_updates_absent_study_permissions(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -636,9 +722,11 @@ class TestONTPermissionsUpdate:
             AC("ss_2000", perm=Permission.READ, zone=zone),
         ]
 
-    @m.context("When ONT permissions are updated")
-    @m.context("When data are single-sample")
-    @m.context("When the permissions are already present")
+    @m.context(
+        "When ONT permissions are updated and "
+        "data are single-sample, and "
+        "permissions are already present"
+    )
     @m.it("Leaves the permissions unchanged")
     def test_updates_present_study_permissions(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -666,9 +754,11 @@ class TestONTPermissionsUpdate:
         assert ensure_secondary_metadata_updated(coll, mlwh_session=ont_synthetic_mlwh)
         assert coll.permissions() == expected_acl
 
-    @m.context("When ONT permissions are updated")
-    @m.context("When the experiment is single-sample")
-    @m.context("When incorrect permissions are present")
+    @m.context(
+        "When ONT permissions are updated and "
+        "the experiment is single-sample, and "
+        "incorrect permissions are present"
+    )
     @m.it("Updated the permissions")
     def test_updates_changed_study_permissions(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -698,9 +788,11 @@ class TestONTPermissionsUpdate:
             AC("ss_2000", perm=Permission.READ, zone=zone),
         ]
 
-    @m.context("When ONT permissions are updated")
-    @m.context("When the experiment is single-sample")
-    @m.context("When data have had consent withdrawn")
+    @m.context(
+        "When ONT permissions are updated and "
+        "the experiment is single-sample, and "
+        "data have had consent withdrawn"
+    )
     @m.it("Does not restore access permissions")
     def test_retains_consent_withdrawn(
         self, ont_simple_experiment_001_slot_1, ont_synthetic_mlwh
@@ -727,9 +819,11 @@ class TestONTPermissionsUpdate:
         for item in coll.contents(acl=True, recurse=True):
             assert item.acl() == expected_acl, f"ACL of {item} is {expected_acl}"
 
-    @m.context("When ONT permissions are updated")
-    @m.context("When the experiment is multiplexed")
-    @m.context("When data have had consent withdrawn")
+    @m.context(
+        "When ONT permissions are updated and "
+        "the experiment is multiplexed, and "
+        "data have had consent withdrawn"
+    )
     @m.it("Does not restore access permissions")
     def test_retains_consent_withdrawn_mx(
         self, ont_multiplexed_experiment_001_slot_1, ont_synthetic_mlwh
@@ -797,8 +891,8 @@ class TestONTPermissionsUpdate:
 
 class TestBarcodeRelatedFunctions(object):
     @m.context(
-        "When rebasecalled ONT runs are plexed and barcodes lie arbitrary levels "
-        "down in the output folder"
+        "When rebasecalled ONT runs are plexed and "
+        "barcodes lie arbitrary levels down in the output folder"
     )
     @m.it("Finds the correct number of barcode collections")
     @m.parametrize("sub_path", ["", "pass", "x/pass", "x/y/pass"])
@@ -823,8 +917,8 @@ class TestBarcodeRelatedFunctions(object):
         assert len(bcolls) == num_expected_bcolls
 
     @m.context(
-        "When rebasecalled ONT runs are plexed and the barcode folder is duplicated "
-        "under a barcode collection"
+        "When rebasecalled ONT runs are plexed and "
+        "the barcode folder is duplicated under a barcode collection"
     )
     @m.it("Raises an exception for duplicated barcode folders")
     def test_barcode_collections_duplicates(self, empty_collection_path):
@@ -843,8 +937,8 @@ class TestBarcodeRelatedFunctions(object):
             barcode_collections(Collection(path), *tag_identifiers)
 
     @m.context(
-        "When rebasecalled ONT runs are plexed and some barcode folders are missing "
-        "although they were used in the lab"
+        "When rebasecalled ONT runs are plexed and "
+        "some barcode folders are missing, although they were used in the lab"
     )
     @m.it("Continues with no error")
     def test_barcode_collections_missing_folders(self, empty_collection_path):

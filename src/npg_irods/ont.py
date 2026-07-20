@@ -323,13 +323,21 @@ def requires_managed_access(obj: DataObject) -> bool:
     if any(suffix in managed for suffix in suffixes):
         return True
 
+    known_safe = [
+        "barcode_alignment_",
+        "final_summary_",
+        "output_hash_",
+        "pore_",
+        "report_",
+        "sample_sheet_",
+        "temperature_",
+        "throughput_",
+    ]
+
     name = p.name.casefold()
-    if (
-        name.startswith("report_")
-        or name.startswith("final_summary_")
-        or name.startswith("sample_sheet_")
-    ):
-        return False
+    for prefix in known_safe:
+        if name.startswith(prefix):
+            return False
 
     return True
 
