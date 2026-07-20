@@ -18,7 +18,7 @@
 
 import json
 from pathlib import Path, PurePath
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from pytest import mark as m
@@ -109,7 +109,13 @@ class TestDiffXeniumScript:
             experiment,
             PurePath("/irods/xenium/XETG00000/0000000/experiment"),
             local_checksum=None,
+            filter_fn=ANY,
         )
+        filter_fn = mock_iter_diff_directory.call_args.kwargs["filter_fn"]
+        assert filter_fn(diff.DiffEntry(".DS_Store", diff.KIND_FILE)) is True
+        assert filter_fn(diff.DiffEntry("nested/.DS_Store", diff.KIND_FILE)) is True
+        assert filter_fn(diff.DiffEntry(".DS_Store.backup", diff.KIND_FILE)) is False
+        assert filter_fn(diff.DiffEntry("my.DS_Store", diff.KIND_FILE)) is False
         assert (
             capsys.readouterr().out
             == "= experiment /irods/xenium/XETG00000/0000000/experiment\n"
@@ -322,6 +328,7 @@ class TestDiffXeniumScript:
             good,
             PurePath("/irods/xenium/XETG00000/0000000/good"),
             local_checksum=None,
+            filter_fn=ANY,
         )
         assert "Failed to map Xenium result directory" in caplog.text
         assert (

@@ -27,13 +27,13 @@ from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.diff import (
+    DiffEntry,
     KIND_DIRECTORY,
     KIND_ERROR,
     STATUS_ERROR,
     STATUS_SAME,
     STATUS_SYMBOLS,
     iter_diff_directory,
-    make_diff_filter, DiffEntry,
 )
 from npg_irods.utilities import make_get_checksum, read_md5_file, sanitise_path
 from npg_irods.xenium import iter_output_directories, xenium_irods_partial_path

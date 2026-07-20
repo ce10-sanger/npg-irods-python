@@ -85,6 +85,7 @@ class DiffEntry:
         # TODO: Clean up
         return PurePath(self.path).name
 
+
 @dataclass(frozen=True)
 class DiffRow:
     """A single diff output row."""
