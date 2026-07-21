@@ -172,7 +172,14 @@ class TestDiffXeniumScript:
         )
         mock_iter_diff_directory.return_value = [
             diff.DiffRow(diff.STATUS_SAME, "a.txt", diff.KIND_FILE),
-            diff.DiffRow(diff.STATUS_DIFFERENT, "b.txt", diff.KIND_FILE),
+            diff.DiffRow(
+                diff.STATUS_DIFFERENT,
+                "b.txt",
+                diff.KIND_FILE,
+                difference=diff.DIFFERENCE_SIZE,
+                left_size=1536,
+                right_size=2048,
+            ),
         ]
 
         with pytest.raises(SystemExit) as exit_info:
@@ -188,9 +195,50 @@ class TestDiffXeniumScript:
                     "status": "different",
                     "path": "b.txt",
                     "kind": diff.KIND_FILE,
+                    "difference": diff.DIFFERENCE_SIZE,
+                    "left_size": 1536,
+                    "right_size": 2048,
                 },
             }
         ]
+
+    @m.context("When a checksum difference triggers text output")
+    @m.it("Includes abbreviated checksums")
+    @patch("npg_irods.cli.diff_xenium.iter_diff_directory", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.xenium_irods_partial_path", autospec=True)
+    @patch("npg_irods.cli.diff_xenium.iter_output_directories", autospec=True)
+    def test_main_text_checksum_difference_trigger(
+        self,
+        mock_iter_output_directories: MagicMock,
+        mock_xenium_irods_partial_path: MagicMock,
+        mock_iter_diff_directory: MagicMock,
+        capsys,
+    ):
+        experiment = Path("experiment")
+        mock_iter_output_directories.return_value = [experiment]
+        mock_xenium_irods_partial_path.return_value = PurePath(
+            "XETG00000", "0000000", "experiment"
+        )
+        mock_iter_diff_directory.return_value = [
+            diff.DiffRow(
+                diff.STATUS_DIFFERENT,
+                "b.txt",
+                diff.KIND_FILE,
+                difference=diff.DIFFERENCE_CHECKSUM,
+                left_checksum="a" * 32,
+                right_checksum="b" * 32,
+            )
+        ]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["root", "/irods/xenium"])
+
+        assert exit_info.value.code == 1
+        assert (
+            capsys.readouterr().out
+            == "* experiment /irods/xenium/XETG00000/0000000/experiment "
+            "* b.txt aaaaaaaa bbbbbbbb\n"
+        )
 
     @m.context("When run with checksum files")
     @m.it("Passes the md5 file reader to the diff iterator")
