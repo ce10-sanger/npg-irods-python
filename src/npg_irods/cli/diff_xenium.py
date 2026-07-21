@@ -221,9 +221,11 @@ def _print_result(json_output, experiment, collection, status, trigger):
     ]
     if trigger is not None:
         if "error" in trigger:
-            fields.extend([trigger["kind"], trigger["error"]])
+            fields.extend([STATUS_SYMBOLS[trigger["status"]], trigger["error"]])
         else:
-            fields.extend([trigger["kind"], _display_trigger_path(trigger)])
+            fields.extend(
+                [STATUS_SYMBOLS[trigger["status"]], _display_trigger_path(trigger)]
+            )
 
     print(" ".join(fields), flush=True)
 

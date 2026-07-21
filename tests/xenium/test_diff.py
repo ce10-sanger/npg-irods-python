@@ -294,7 +294,7 @@ class TestDiffXeniumScript:
         assert exit_info.value.code == 1
         assert (
             capsys.readouterr().out
-            == "> experiment /irods/xenium/XETG00000/0000000/experiment directory a/\n"
+            == "> experiment /irods/xenium/XETG00000/0000000/experiment > a/\n"
         )
 
     @m.context("When one experiment cannot be mapped")
@@ -333,7 +333,7 @@ class TestDiffXeniumScript:
         assert "Failed to map Xenium result directory" in caplog.text
         assert (
             capsys.readouterr().out
-            == "! bad - error bad metadata\n= good /irods/xenium/XETG00000/0000000/good\n"
+            == "! bad - ! bad metadata\n= good /irods/xenium/XETG00000/0000000/good\n"
         )
 
     @m.context("When diffing an output directory raises an error")
@@ -361,7 +361,7 @@ class TestDiffXeniumScript:
         assert exit_info.value.code == 1
         assert (
             capsys.readouterr().out
-            == "! experiment /irods/xenium/XETG00000/0000000/experiment error bad diff\n"
+            == "! experiment /irods/xenium/XETG00000/0000000/experiment ! bad diff\n"
         )
 
     @staticmethod
