@@ -73,6 +73,14 @@ Exclude macOS Finder metadata files at any depth:
     irods-diff --exclude '(^|/)\\.DS_Store$' DIRECTORY COLLECTION
 """
 
+epilog = """
+notes:
+  Replicas: irods-diff works with iRODS at the abstraction level of a virtual
+    filesystem and does not verify the health or consistency of replicas.
+    If your use case requires this, consider running check-checksums on the
+    output of irods-diff.
+"""
+
 
 def logger():
     return structlog.get_logger(__name__)
@@ -80,7 +88,9 @@ def logger():
 
 def main():
     parser = argparse.ArgumentParser(
-        description=description, formatter_class=argparse.RawDescriptionHelpFormatter
+        description=description,
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_logging_arguments(parser)
     parser.add_argument(
