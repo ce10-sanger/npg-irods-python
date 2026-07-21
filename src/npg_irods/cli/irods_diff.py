@@ -33,6 +33,8 @@ from npg_irods.diff import (
     KIND_DIRECTORY,
     STATUS_ERROR,
     STATUS_SYMBOLS,
+    diff_row_to_dict,
+    format_diff_details,
     iter_diff_paths,
     make_diff_filter,
 )
@@ -55,6 +57,7 @@ status symbols are:
 
 With --json, status values are same, local_only, irods_only, different, or error.
 For a file and data object comparison, path is the local file basename.
+File differences include either the local and iRODS sizes or MD5 checksums.
 
 Exit status is 0 when all compared paths are the same, 1 when differences are
 found, and 2 when an error is encountered.
@@ -224,14 +227,11 @@ def main():
             no_recurse_missing_dirs=args.no_recurse_missing_dirs,
         ):
             if args.json:
-                print(
-                    json.dumps(
-                        {"status": row.status, "path": row.path, "kind": row.kind}
-                    ),
-                    flush=True,
-                )
+                print(json.dumps(diff_row_to_dict(row)), flush=True)
             else:
-                print(f"{STATUS_SYMBOLS[row.status]} {_display_path(row)}", flush=True)
+                fields = [STATUS_SYMBOLS[row.status], _display_path(row)]
+                fields.extend(format_diff_details(row))
+                print(" ".join(fields), flush=True)
 
             if row.status == STATUS_ERROR:
                 has_error = True

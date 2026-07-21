@@ -45,23 +45,122 @@ def rows_as_triples(rows):
     return [(row.status, row.path, row.kind) for row in rows]
 
 
+@m.describe("Diff output helpers")
+class TestDiffOutputHelpers:
+    @m.context("When formatting byte counts")
+    @m.it("Uses compact IEC units")
+    @pytest.mark.parametrize(
+        ("size", "expected"),
+        [
+            (0, "0B"),
+            (1023, "1023B"),
+            (1024, "1KiB"),
+            (1536, "1.5KiB"),
+            (1024**2, "1MiB"),
+        ],
+    )
+    def test_format_size(self, size, expected):
+        assert diff.format_size(size) == expected
+
+    @m.context("When shortening an MD5 checksum")
+    @m.it("Returns the first eight characters")
+    def test_short_checksum(self):
+        assert diff.short_checksum("abcdef1234567890" * 2) == "abcdef12"
+
+    @m.context("When serialising file differences")
+    @m.it("Includes only the relevant details")
+    @pytest.mark.parametrize(
+        ("row", "expected"),
+        [
+            (
+                diff.DiffRow(
+                    diff.STATUS_DIFFERENT,
+                    "a.txt",
+                    diff.KIND_FILE,
+                    difference=diff.DIFFERENCE_SIZE,
+                    left_size=1536,
+                    right_size=2048,
+                ),
+                {
+                    "status": diff.STATUS_DIFFERENT,
+                    "path": "a.txt",
+                    "kind": diff.KIND_FILE,
+                    "difference": diff.DIFFERENCE_SIZE,
+                    "left_size": 1536,
+                    "right_size": 2048,
+                },
+            ),
+            (
+                diff.DiffRow(
+                    diff.STATUS_DIFFERENT,
+                    "a.txt",
+                    diff.KIND_FILE,
+                    difference=diff.DIFFERENCE_CHECKSUM,
+                    left_checksum="a" * 32,
+                    right_checksum="b" * 32,
+                ),
+                {
+                    "status": diff.STATUS_DIFFERENT,
+                    "path": "a.txt",
+                    "kind": diff.KIND_FILE,
+                    "difference": diff.DIFFERENCE_CHECKSUM,
+                    "left_checksum": "a" * 32,
+                    "right_checksum": "b" * 32,
+                },
+            ),
+            (
+                diff.DiffRow(diff.STATUS_SAME, "a.txt", diff.KIND_FILE),
+                {
+                    "status": diff.STATUS_SAME,
+                    "path": "a.txt",
+                    "kind": diff.KIND_FILE,
+                },
+            ),
+        ],
+    )
+    def test_diff_row_to_dict(self, row, expected):
+        assert diff.diff_row_to_dict(row) == expected
+
+
 @m.describe("Path diff")
 class TestPathDiff:
     @m.context("When comparing a file and data object")
     @m.it("Compares size and checksum and uses the local basename")
     @pytest.mark.parametrize(
-        ("remote_size", "remote_checksum", "expected_status"),
+        ("remote_size", "remote_checksum", "expected_row"),
         [
-            (4, "a" * 32, diff.STATUS_SAME),
-            (5, "a" * 32, diff.STATUS_DIFFERENT),
-            (4, "b" * 32, diff.STATUS_DIFFERENT),
+            (4, "a" * 32, diff.DiffRow(diff.STATUS_SAME, "local.txt", diff.KIND_FILE)),
+            (
+                5,
+                "a" * 32,
+                diff.DiffRow(
+                    diff.STATUS_DIFFERENT,
+                    "local.txt",
+                    diff.KIND_FILE,
+                    difference=diff.DIFFERENCE_SIZE,
+                    left_size=4,
+                    right_size=5,
+                ),
+            ),
+            (
+                4,
+                "b" * 32,
+                diff.DiffRow(
+                    diff.STATUS_DIFFERENT,
+                    "local.txt",
+                    diff.KIND_FILE,
+                    difference=diff.DIFFERENCE_CHECKSUM,
+                    left_checksum="a" * 32,
+                    right_checksum="b" * 32,
+                ),
+            ),
         ],
     )
     def test_diff_paths_file(
         self,
         remote_size,
         remote_checksum,
-        expected_status,
+        expected_row,
         tmp_path,
     ):
         local_path = tmp_path / "local.txt"
@@ -85,7 +184,7 @@ class TestPathDiff:
                 num_clients=3,
             )
 
-        assert rows == [diff.DiffRow(expected_status, "local.txt", diff.KIND_FILE)]
+        assert rows == [expected_row]
         mock_client_pool.assert_called_once_with(maxsize=3)
         mock_data_object.assert_called_once_with(
             PurePath("/collection/remote.dat"), check_type=False, pool=pool
@@ -114,6 +213,20 @@ class TestPathDiff:
             )
 
         assert rows == [diff.DiffRow(diff.STATUS_ERROR, "local.txt", diff.KIND_FILE)]
+
+    @m.context("When file sizes differ")
+    @m.it("Does not read checksums")
+    def test_compare_files_size_difference_skips_checksums(self):
+        left_checksum = MagicMock()
+        right_checksum = MagicMock()
+        local = diff.DiffEntry("a.txt", diff.KIND_FILE, size=1, checksum=left_checksum)
+        irods = diff.DiffEntry("a.txt", diff.KIND_FILE, size=2, checksum=right_checksum)
+
+        row = diff._compare_files(local, irods)
+
+        assert row.difference == diff.DIFFERENCE_SIZE
+        left_checksum.assert_not_called()
+        right_checksum.assert_not_called()
 
     @m.context("When only the local file exists")
     @m.it("Returns a local-only row")
@@ -231,6 +344,22 @@ class TestDirectoryDiff:
             (diff.STATUS_DIFFERENT, "c.txt", diff.KIND_FILE),
             (diff.STATUS_ERROR, "d.txt", diff.KIND_FILE),
         ]
+        assert rows[1] == diff.DiffRow(
+            diff.STATUS_DIFFERENT,
+            "b.txt",
+            diff.KIND_FILE,
+            difference=diff.DIFFERENCE_SIZE,
+            left_size=1,
+            right_size=2,
+        )
+        assert rows[2] == diff.DiffRow(
+            diff.STATUS_DIFFERENT,
+            "c.txt",
+            diff.KIND_FILE,
+            difference=diff.DIFFERENCE_CHECKSUM,
+            left_checksum="c" * 32,
+            right_checksum="e" * 32,
+        )
 
     @m.context("When iRODS data objects are listed")
     @m.it("Builds relative paths from parent path and data object name")
@@ -561,6 +690,47 @@ class TestIrodsDiffScript:
         )
         assert capsys.readouterr().out == "= a/\n"
 
+    @m.context("When a file differs")
+    @m.it("Prints brief difference details")
+    @pytest.mark.parametrize(
+        ("row", "expected"),
+        [
+            (
+                diff.DiffRow(
+                    diff.STATUS_DIFFERENT,
+                    "file.txt",
+                    diff.KIND_FILE,
+                    difference=diff.DIFFERENCE_SIZE,
+                    left_size=1536,
+                    right_size=2048,
+                ),
+                "* file.txt 1.5KiB 2KiB\n",
+            ),
+            (
+                diff.DiffRow(
+                    diff.STATUS_DIFFERENT,
+                    "file.txt",
+                    diff.KIND_FILE,
+                    difference=diff.DIFFERENCE_CHECKSUM,
+                    left_checksum="a" * 32,
+                    right_checksum="b" * 32,
+                ),
+                "* file.txt aaaaaaaa bbbbbbbb\n",
+            ),
+        ],
+    )
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_plain_text_difference_details(
+        self, mock_iter_diff_paths: MagicMock, row, expected, capsys
+    ):
+        mock_iter_diff_paths.return_value = [row]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["file.txt", "/collection/file.txt"])
+
+        assert exit_info.value.code == diff.EXIT_DIFFERENCE
+        assert capsys.readouterr().out == expected
+
     @m.context("When run with JSON output")
     @m.it("Prints JSON Lines")
     @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
@@ -574,6 +744,64 @@ class TestIrodsDiffScript:
         assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [
             {"status": "same", "path": "a", "kind": diff.KIND_DIRECTORY}
         ]
+
+    @m.context("When a file has a size difference in JSON output")
+    @m.it("Prints exact byte counts and the difference type")
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_json_size_difference(self, mock_iter_diff_paths: MagicMock, capsys):
+        mock_iter_diff_paths.return_value = [
+            diff.DiffRow(
+                diff.STATUS_DIFFERENT,
+                "file.txt",
+                diff.KIND_FILE,
+                difference=diff.DIFFERENCE_SIZE,
+                left_size=1536,
+                right_size=2048,
+            )
+        ]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["--json", "file.txt", "/collection/file.txt"])
+
+        assert exit_info.value.code == diff.EXIT_DIFFERENCE
+        assert json.loads(capsys.readouterr().out) == {
+            "status": diff.STATUS_DIFFERENT,
+            "path": "file.txt",
+            "kind": diff.KIND_FILE,
+            "difference": diff.DIFFERENCE_SIZE,
+            "left_size": 1536,
+            "right_size": 2048,
+        }
+
+    @m.context("When a file has a checksum difference in JSON output")
+    @m.it("Prints full MD5 checksums and the difference type")
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_json_checksum_difference(
+        self, mock_iter_diff_paths: MagicMock, capsys
+    ):
+        mock_iter_diff_paths.return_value = [
+            diff.DiffRow(
+                diff.STATUS_DIFFERENT,
+                "file.txt",
+                diff.KIND_FILE,
+                difference=diff.DIFFERENCE_CHECKSUM,
+                left_checksum="a" * 32,
+                right_checksum="b" * 32,
+            )
+        ]
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(["--json", "file.txt", "/collection/file.txt"])
+
+        assert exit_info.value.code == diff.EXIT_DIFFERENCE
+        assert json.loads(capsys.readouterr().out) == {
+            "status": diff.STATUS_DIFFERENT,
+            "path": "file.txt",
+            "kind": diff.KIND_FILE,
+            "difference": diff.DIFFERENCE_CHECKSUM,
+            "left_checksum": "a" * 32,
+            "right_checksum": "b" * 32,
+        }
 
     @m.context("When filtering options are supplied")
     @m.it("Builds and passes a diff filter")

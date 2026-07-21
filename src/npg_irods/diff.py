@@ -53,6 +53,9 @@ KIND_ERROR = "error"
 
 DIFFERENCE_STATUSES = frozenset((STATUS_LOCAL, STATUS_IRODS, STATUS_DIFFERENT))
 
+DIFFERENCE_SIZE = "size"
+DIFFERENCE_CHECKSUM = "checksum"
+
 
 @dataclass(frozen=True)
 class DiffEntry:
@@ -93,6 +96,95 @@ class DiffRow:
     status: str
     path: str
     kind: str
+    difference: str | None = None
+    left_size: int | None = None
+    right_size: int | None = None
+    left_checksum: str | None = None
+    right_checksum: str | None = None
+
+
+def diff_row_to_dict(row: DiffRow) -> dict[str, str | int]:
+    """Return the JSON-compatible representation of a diff row."""
+    result: dict[str, str | int] = {
+        "status": row.status,
+        "path": row.path,
+        "kind": row.kind,
+    }
+
+    if (
+        row.difference == DIFFERENCE_SIZE
+        and row.left_size is not None
+        and row.right_size is not None
+    ):
+        result.update(
+            {
+                "difference": row.difference,
+                "left_size": row.left_size,
+                "right_size": row.right_size,
+            }
+        )
+    elif (
+        row.difference == DIFFERENCE_CHECKSUM
+        and row.left_checksum is not None
+        and row.right_checksum is not None
+    ):
+        result.update(
+            {
+                "difference": row.difference,
+                "left_checksum": row.left_checksum,
+                "right_checksum": row.right_checksum,
+            }
+        )
+
+    return result
+
+
+def format_diff_details(row: DiffRow) -> list[str]:
+    """Return compact text fields describing a file difference."""
+    if (
+        row.difference == DIFFERENCE_SIZE
+        and row.left_size is not None
+        and row.right_size is not None
+    ):
+        return [format_size(row.left_size), format_size(row.right_size)]
+
+    if (
+        row.difference == DIFFERENCE_CHECKSUM
+        and row.left_checksum is not None
+        and row.right_checksum is not None
+    ):
+        return [short_checksum(row.left_checksum), short_checksum(row.right_checksum)]
+
+    return []
+
+
+def format_size(size: int) -> str:
+    """Format a byte count using compact IEC units."""
+    if size < 0:
+        raise ValueError(f"Size must not be negative: {size}")
+
+    units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB")
+    value = float(size)
+    unit_index = 0
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{size}B"
+
+    rounded = round(value, 1)
+    if rounded >= 1024 and unit_index < len(units) - 1:
+        rounded /= 1024
+        unit_index += 1
+
+    number = f"{rounded:.1f}".removesuffix(".0")
+    return f"{number}{units[unit_index]}"
+
+
+def short_checksum(checksum: str) -> str:
+    """Return the first eight characters of an MD5 checksum."""
+    return checksum[:8]
 
 
 def make_diff_filter(
@@ -677,11 +769,29 @@ def _side_only_row(entry: DiffEntry | None, status: str) -> DiffRow:
 
 def _compare_files(local: DiffEntry, irods: DiffEntry) -> DiffRow:
     try:
-        if local.get_size() != irods.get_size():
-            return DiffRow(STATUS_DIFFERENT, local.path, KIND_FILE)
+        left_size = local.get_size()
+        right_size = irods.get_size()
+        if left_size != right_size:
+            return DiffRow(
+                STATUS_DIFFERENT,
+                local.path,
+                KIND_FILE,
+                difference=DIFFERENCE_SIZE,
+                left_size=left_size,
+                right_size=right_size,
+            )
 
-        if local.get_checksum() != irods.get_checksum():
-            return DiffRow(STATUS_DIFFERENT, local.path, KIND_FILE)
+        left_checksum = local.get_checksum()
+        right_checksum = irods.get_checksum()
+        if left_checksum != right_checksum:
+            return DiffRow(
+                STATUS_DIFFERENT,
+                local.path,
+                KIND_FILE,
+                difference=DIFFERENCE_CHECKSUM,
+                left_checksum=left_checksum,
+                right_checksum=right_checksum,
+            )
 
         return DiffRow(STATUS_SAME, local.path, KIND_FILE)
     except Exception as e:

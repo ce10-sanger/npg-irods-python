@@ -28,11 +28,14 @@ from npg.log import configure_structlog
 from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.diff import (
     DiffEntry,
+    DiffRow,
     KIND_DIRECTORY,
     KIND_ERROR,
     STATUS_ERROR,
     STATUS_SAME,
     STATUS_SYMBOLS,
+    diff_row_to_dict,
+    format_diff_details,
     iter_diff_directory,
 )
 from npg_irods.utilities import make_get_checksum, read_md5_file, sanitise_path
@@ -168,11 +171,7 @@ def main():
                     experiment,
                     collection,
                     trigger.status,
-                    {
-                        "status": trigger.status,
-                        "path": trigger.path,
-                        "kind": trigger.kind,
-                    },
+                    trigger,
                 )
         except Exception as e:
             has_non_same = True
@@ -201,13 +200,16 @@ def main():
 
 def _print_result(json_output, experiment, collection, status, trigger):
     if json_output:
+        trigger_output = (
+            diff_row_to_dict(trigger) if isinstance(trigger, DiffRow) else trigger
+        )
         print(
             json.dumps(
                 {
                     "experiment": experiment.as_posix(),
                     "collection": _collection_path(collection),
                     "status": status,
-                    "trigger": trigger,
+                    "trigger": trigger_output,
                 }
             ),
             flush=True,
@@ -220,12 +222,13 @@ def _print_result(json_output, experiment, collection, status, trigger):
         _collection_path(collection),
     ]
     if trigger is not None:
-        if "error" in trigger:
-            fields.extend([STATUS_SYMBOLS[trigger["status"]], trigger["error"]])
-        else:
+        if isinstance(trigger, DiffRow):
             fields.extend(
-                [STATUS_SYMBOLS[trigger["status"]], _display_trigger_path(trigger)]
+                [STATUS_SYMBOLS[trigger.status], _display_trigger_path(trigger)]
             )
+            fields.extend(format_diff_details(trigger))
+        elif "error" in trigger:
+            fields.extend([STATUS_SYMBOLS[trigger["status"]], trigger["error"]])
 
     print(" ".join(fields), flush=True)
 
@@ -238,10 +241,10 @@ def _collection_path(collection):
 
 
 def _display_trigger_path(trigger):
-    if trigger["kind"] == KIND_DIRECTORY:
-        return f"{trigger['path']}/"
+    if trigger.kind == KIND_DIRECTORY:
+        return f"{trigger.path}/"
 
-    return trigger["path"]
+    return trigger.path
 
 
 if __name__ == "__main__":
