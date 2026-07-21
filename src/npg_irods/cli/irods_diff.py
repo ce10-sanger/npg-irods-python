@@ -33,33 +33,41 @@ from npg_irods.diff import (
     KIND_DIRECTORY,
     STATUS_ERROR,
     STATUS_SYMBOLS,
-    iter_diff_directory,
+    iter_diff_paths,
     make_diff_filter,
 )
 from npg_irods.utilities import make_get_checksum, read_md5_file
 
 description = """
-Compare a local directory with an iRODS collection.
+Compare a local filesystem path with an iRODS path.
+
+The supported path pairs are a local directory and iRODS collection, or a local
+file and iRODS data object.
 
 The output contains one row for each relative path below the two roots. Plain text
 status symbols are:
 
     =  path exists on both sides and matches
-    >  path exists only in the local directory
-    <  path exists only in the iRODS collection
+    >  path exists only in the local filesystem
+    <  path exists only in iRODS
     *  path exists on both sides but differs
     !  path could not be compared because of an error
 
 With --json, status values are same, local_only, irods_only, different, or error.
+For a file and data object comparison, path is the local file basename.
 
 Exit status is 0 when all compared paths are the same, 1 when differences are
 found, and 2 when an error is encountered.
 
 Examples:
 
+Compare a file with a data object:
+
+    irods-diff FILE DATA_OBJECT
+
 Exclude macOS Finder metadata files at any depth:
 
-    diff-directory --exclude '(^|/)\\.DS_Store$' DIRECTORY COLLECTION
+    irods-diff --exclude '(^|/)\\.DS_Store$' DIRECTORY COLLECTION
 """
 
 
@@ -73,13 +81,15 @@ def main():
     )
     add_logging_arguments(parser)
     parser.add_argument(
-        "directory",
-        help="The local directory to compare.",
+        "local_path",
+        metavar="LOCAL_PATH",
+        help="The local directory or file to compare.",
         type=str,
     )
     parser.add_argument(
-        "collection",
-        help="The iRODS collection to compare.",
+        "irods_path",
+        metavar="IRODS_PATH",
+        help="The iRODS collection or data object to compare.",
         type=str,
     )
     parser.add_argument(
@@ -88,7 +98,8 @@ def main():
         "multiple times to filter on additional regular expressions. Exclude "
         "regular expressions are applied after any include regular expressions. "
         "Paths are relative to the compared directory and collection roots. "
-        "Optional, defaults to none.",
+        "Only valid for directory and collection comparisons. Optional, "
+        "defaults to none.",
         type=str,
         action="append",
         default=[],
@@ -99,19 +110,22 @@ def main():
         "paths will be compared, all others will be ignored. If more than one "
         "regex is supplied, the matches for all of them are aggregated. "
         "Paths are relative to the compared directory and collection roots. "
-        "Optional, defaults to all.",
+        "Only valid for directory and collection comparisons. Optional, "
+        "defaults to all.",
         type=str,
         action="append",
         default=[],
     )
     parser.add_argument(
         "--include-top-level-files",
-        help="Include top level files and data objects. Composes with other filters.",
+        help="Include top level files and data objects. Composes with other filters. "
+        "Only valid for directory and collection comparisons.",
         action="store_true",
     )
     parser.add_argument(
         "--exclude-md5",
-        help="Exclude md5 files and data objects. Composes with other filters.",
+        help="Exclude md5 files and data objects. Composes with other filters. "
+        "Only valid for directory and collection comparisons.",
         action="store_true",
     )
     checksums_group = parser.add_mutually_exclusive_group(required=False)
@@ -137,7 +151,7 @@ def main():
     parser.add_argument(
         "--no-recurse-missing-dirs",
         help="Report directories that exist only on one side, but do not recurse "
-        "into them.",
+        "into them. Only valid for directory and collection comparisons.",
         action="store_true",
     )
     parser.add_argument(
@@ -201,9 +215,9 @@ def main():
     has_error = False
     has_difference = False
     try:
-        for row in iter_diff_directory(
-            args.directory,
-            args.collection,
+        for row in iter_diff_paths(
+            args.local_path,
+            args.irods_path,
             local_checksum=checksum_fn,
             filter_fn=filter_fn,
             num_clients=args.num_clients,
@@ -229,9 +243,9 @@ def main():
                     sys.exit(EXIT_DIFFERENCE)
     except Exception as e:
         logger().error(
-            "Failed to diff directory",
-            directory=args.directory,
-            collection=args.collection,
+            "Failed to diff paths",
+            local_path=args.local_path,
+            irods_path=args.irods_path,
             error=str(e),
         )
         sys.exit(EXIT_ERROR)

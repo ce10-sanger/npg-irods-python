@@ -25,7 +25,7 @@ import pytest
 from pytest import mark as m
 
 from npg_irods import diff
-from npg_irods.cli import diff_directory as diff_directory_script
+from npg_irods.cli import irods_diff as irods_diff_script
 
 
 def file_entry(path, size=1, checksum="a" * 32):
@@ -43,6 +43,149 @@ def rows_as_tuples(rows):
 
 def rows_as_triples(rows):
     return [(row.status, row.path, row.kind) for row in rows]
+
+
+@m.describe("Path diff")
+class TestPathDiff:
+    @m.context("When comparing a file and data object")
+    @m.it("Compares size and checksum and uses the local basename")
+    @pytest.mark.parametrize(
+        ("remote_size", "remote_checksum", "expected_status"),
+        [
+            (4, "a" * 32, diff.STATUS_SAME),
+            (5, "a" * 32, diff.STATUS_DIFFERENT),
+            (4, "b" * 32, diff.STATUS_DIFFERENT),
+        ],
+    )
+    def test_diff_paths_file(
+        self,
+        remote_size,
+        remote_checksum,
+        expected_status,
+        tmp_path,
+    ):
+        local_path = tmp_path / "local.txt"
+        local_path.write_text("test")
+        pool = object()
+
+        with (
+            patch("npg_irods.diff.DataObject", autospec=True) as mock_data_object,
+            patch("npg_irods.diff.rods_path_type") as mock_rods_path_type,
+            patch("npg_irods.diff.client_pool") as mock_client_pool,
+        ):
+            mock_rods_path_type.return_value = mock_data_object
+            mock_client_pool.return_value.__enter__.return_value = pool
+            mock_data_object.return_value.size.return_value = remote_size
+            mock_data_object.return_value.checksum.return_value = remote_checksum
+
+            rows = diff.diff_paths(
+                local_path,
+                "/collection/remote.dat",
+                local_checksum=lambda _path: "a" * 32,
+                num_clients=3,
+            )
+
+        assert rows == [diff.DiffRow(expected_status, "local.txt", diff.KIND_FILE)]
+        mock_client_pool.assert_called_once_with(maxsize=3)
+        mock_data_object.assert_called_once_with(
+            PurePath("/collection/remote.dat"), check_type=False, pool=pool
+        )
+
+    @m.context("When a file checksum cannot be read")
+    @m.it("Returns an error row")
+    def test_diff_paths_file_checksum_error(self, tmp_path):
+        local_path = tmp_path / "local.txt"
+        local_path.write_text("test")
+
+        with (
+            patch("npg_irods.diff.DataObject", autospec=True) as mock_data_object,
+            patch("npg_irods.diff.rods_path_type") as mock_rods_path_type,
+            patch("npg_irods.diff.client_pool") as mock_client_pool,
+        ):
+            mock_rods_path_type.return_value = mock_data_object
+            mock_client_pool.return_value.__enter__.return_value = object()
+            mock_data_object.return_value.size.return_value = 4
+            mock_data_object.return_value.checksum.return_value = "a" * 32
+
+            rows = diff.diff_paths(
+                local_path,
+                "/collection/remote.dat",
+                local_checksum=MagicMock(side_effect=ValueError("bad checksum")),
+            )
+
+        assert rows == [diff.DiffRow(diff.STATUS_ERROR, "local.txt", diff.KIND_FILE)]
+
+    @m.context("When only the local file exists")
+    @m.it("Returns a local-only row")
+    @patch("npg_irods.diff.rods_path_type", return_value=None)
+    def test_diff_paths_local_file_only(
+        self, _mock_rods_path_type: MagicMock, tmp_path
+    ):
+        local_path = tmp_path / "local.txt"
+        local_path.write_text("test")
+
+        rows = diff.diff_paths(local_path, "/collection/remote.dat")
+
+        assert rows == [diff.DiffRow(diff.STATUS_LOCAL, "local.txt", diff.KIND_FILE)]
+
+    @m.context("When only the iRODS data object exists")
+    @m.it("Returns an iRODS-only row using the missing local basename")
+    def test_diff_paths_irods_file_only(self, tmp_path):
+        local_path = tmp_path / "missing.txt"
+
+        with patch(
+            "npg_irods.diff.rods_path_type", return_value=diff.DataObject
+        ) as mock_rods_path_type:
+            rows = diff.diff_paths(local_path, "/collection/remote.dat")
+
+        assert rows == [diff.DiffRow(diff.STATUS_IRODS, "missing.txt", diff.KIND_FILE)]
+        mock_rods_path_type.assert_called_once_with("/collection/remote.dat")
+
+    @m.context("When neither root exists")
+    @m.it("Raises an error")
+    @patch("npg_irods.diff.rods_path_type", return_value=None)
+    def test_diff_paths_both_missing(self, _mock_rods_path_type: MagicMock, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            diff.diff_paths(tmp_path / "missing.txt", "/collection/missing.txt")
+
+    @m.context("When root types are incompatible")
+    @m.it("Raises an error")
+    @pytest.mark.parametrize(
+        ("local_kind", "irods_type"),
+        [
+            (diff.KIND_DIRECTORY, diff.DataObject),
+            (diff.KIND_FILE, diff.Collection),
+        ],
+    )
+    def test_diff_paths_type_mismatch(self, local_kind, irods_type, tmp_path):
+        local_path = tmp_path / "local"
+        if local_kind == diff.KIND_DIRECTORY:
+            local_path.mkdir()
+        else:
+            local_path.write_text("test")
+
+        with patch("npg_irods.diff.rods_path_type", return_value=irods_type):
+            with pytest.raises(ValueError, match="Cannot compare"):
+                diff.diff_paths(local_path, "/remote")
+
+    @m.context("When directory-only behavior is requested for files")
+    @m.it("Raises an error")
+    @pytest.mark.parametrize(
+        "options",
+        [
+            {"filter_fn": lambda _entry: False},
+            {"no_recurse_missing_dirs": True},
+        ],
+    )
+    @patch("npg_irods.diff.rods_path_type", return_value=diff.DataObject)
+    def test_diff_paths_file_rejects_directory_options(
+        self, _mock_rods_path_type: MagicMock, options, tmp_path
+    ):
+        local_path = tmp_path / "local.txt"
+        local_path.write_text("test")
+
+        with pytest.raises(ValueError, match="only supported for directory"):
+            diff.diff_paths(local_path, "/collection/remote.dat", **options)
 
 
 @m.describe("Directory diff")
@@ -384,8 +527,8 @@ class TestDirectoryDiff:
             diff.diff_directory(tmp_path / "missing", "/missing")
 
 
-@m.describe("Diff directory script")
-class TestDiffDirectoryScript:
+@m.describe("iRODS diff script")
+class TestIrodsDiffScript:
     @m.context("When help is requested")
     @m.it("Shows how to exclude macOS Finder metadata")
     def test_main_help_ds_store_example(self, capsys):
@@ -394,21 +537,21 @@ class TestDiffDirectoryScript:
 
         assert exit_info.value.code == 0
         assert (
-            "diff-directory --exclude '(^|/)\\.DS_Store$' DIRECTORY COLLECTION"
+            "irods-diff --exclude '(^|/)\\.DS_Store$' DIRECTORY COLLECTION"
             in capsys.readouterr().out
         )
 
     @m.context("When run with default parameters")
     @m.it("Prints plain text diff rows")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_plain_text(self, mock_iter_diff_directory: MagicMock, capsys):
-        mock_iter_diff_directory.return_value = [
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_plain_text(self, mock_iter_diff_paths: MagicMock, capsys):
+        mock_iter_diff_paths.return_value = [
             diff.DiffRow(diff.STATUS_SAME, "a", diff.KIND_DIRECTORY),
         ]
 
         self._main(["directory", "/collection"])
 
-        mock_iter_diff_directory.assert_called_once_with(
+        mock_iter_diff_paths.assert_called_once_with(
             "directory",
             "/collection",
             local_checksum=None,
@@ -420,9 +563,9 @@ class TestDiffDirectoryScript:
 
     @m.context("When run with JSON output")
     @m.it("Prints JSON Lines")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_json(self, mock_iter_diff_directory: MagicMock, capsys):
-        mock_iter_diff_directory.return_value = [
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_json(self, mock_iter_diff_paths: MagicMock, capsys):
+        mock_iter_diff_paths.return_value = [
             diff.DiffRow(diff.STATUS_SAME, "a", diff.KIND_DIRECTORY)
         ]
 
@@ -434,16 +577,16 @@ class TestDiffDirectoryScript:
 
     @m.context("When filtering options are supplied")
     @m.it("Builds and passes a diff filter")
-    @patch("npg_irods.cli.diff_directory.make_diff_filter", autospec=True)
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
+    @patch("npg_irods.cli.irods_diff.make_diff_filter", autospec=True)
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
     def test_main_filter_options(
         self,
-        mock_iter_diff_directory: MagicMock,
+        mock_iter_diff_paths: MagicMock,
         mock_make_diff_filter: MagicMock,
     ):
         filter_fn = lambda entry: False
         mock_make_diff_filter.return_value = filter_fn
-        mock_iter_diff_directory.return_value = []
+        mock_iter_diff_paths.return_value = []
 
         self._main(
             [
@@ -466,25 +609,47 @@ class TestDiffDirectoryScript:
             include_top_level_files=True,
             exclude_md5=True,
         )
-        assert mock_iter_diff_directory.call_args.kwargs["filter_fn"] is filter_fn
+        assert mock_iter_diff_paths.call_args.kwargs["filter_fn"] is filter_fn
 
     @m.context("When missing directory recursion is disabled")
     @m.it("Passes the option to the diff iterator")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_no_recurse_missing_dirs(self, mock_iter_diff_directory: MagicMock):
-        mock_iter_diff_directory.return_value = []
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_no_recurse_missing_dirs(self, mock_iter_diff_paths: MagicMock):
+        mock_iter_diff_paths.return_value = []
 
         self._main(["--no-recurse-missing-dirs", "directory", "/collection"])
 
-        assert (
-            mock_iter_diff_directory.call_args.kwargs["no_recurse_missing_dirs"] is True
-        )
+        assert mock_iter_diff_paths.call_args.kwargs["no_recurse_missing_dirs"] is True
+
+    @m.context("When directory-only options are supplied for a file")
+    @m.it("Exits with error status")
+    @pytest.mark.parametrize(
+        "option",
+        [
+            ["--include", "local"],
+            ["--exclude", "local"],
+            ["--include-top-level-files"],
+            ["--exclude-md5"],
+            ["--no-recurse-missing-dirs"],
+        ],
+    )
+    @patch("npg_irods.diff.rods_path_type", return_value=diff.DataObject)
+    def test_main_file_rejects_directory_options(
+        self, _mock_rods_path_type: MagicMock, option, tmp_path
+    ):
+        local_path = tmp_path / "local.txt"
+        local_path.write_text("test")
+
+        with pytest.raises(SystemExit) as exit_info:
+            self._main(option + [str(local_path), "/collection/remote.dat"])
+
+        assert exit_info.value.code == diff.EXIT_ERROR
 
     @m.context("When any error rows are produced")
     @m.it("Exits with error status after printing all output")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_error_status(self, mock_iter_diff_directory: MagicMock, capsys):
-        mock_iter_diff_directory.return_value = [
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_error_status(self, mock_iter_diff_paths: MagicMock, capsys):
+        mock_iter_diff_paths.return_value = [
             diff.DiffRow(diff.STATUS_ERROR, "a.txt", diff.KIND_FILE),
             diff.DiffRow(diff.STATUS_SAME, "b.txt", diff.KIND_FILE),
         ]
@@ -497,9 +662,9 @@ class TestDiffDirectoryScript:
 
     @m.context("When any difference rows are produced")
     @m.it("Exits with difference status after printing all output")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_difference_status(self, mock_iter_diff_directory: MagicMock, capsys):
-        mock_iter_diff_directory.return_value = [
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_difference_status(self, mock_iter_diff_paths: MagicMock, capsys):
+        mock_iter_diff_paths.return_value = [
             diff.DiffRow(diff.STATUS_LOCAL, "a.txt", diff.KIND_FILE),
             diff.DiffRow(diff.STATUS_SAME, "b.txt", diff.KIND_FILE),
         ]
@@ -512,11 +677,9 @@ class TestDiffDirectoryScript:
 
     @m.context("When both differences and errors are produced")
     @m.it("Exits with error status after printing all output")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_error_takes_precedence(
-        self, mock_iter_diff_directory: MagicMock, capsys
-    ):
-        mock_iter_diff_directory.return_value = [
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_error_takes_precedence(self, mock_iter_diff_paths: MagicMock, capsys):
+        mock_iter_diff_paths.return_value = [
             diff.DiffRow(diff.STATUS_LOCAL, "a.txt", diff.KIND_FILE),
             diff.DiffRow(diff.STATUS_ERROR, "b.txt", diff.KIND_FILE),
         ]
@@ -529,9 +692,9 @@ class TestDiffDirectoryScript:
 
     @m.context("When exit-on-difference is set")
     @m.it("Exits with difference status after printing the first difference")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_exit_on_difference(self, mock_iter_diff_directory: MagicMock, capsys):
-        mock_iter_diff_directory.return_value = [
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_exit_on_difference(self, mock_iter_diff_paths: MagicMock, capsys):
+        mock_iter_diff_paths.return_value = [
             diff.DiffRow(diff.STATUS_LOCAL, "a.txt", diff.KIND_FILE),
             diff.DiffRow(diff.STATUS_SAME, "b.txt", diff.KIND_FILE),
         ]
@@ -544,9 +707,9 @@ class TestDiffDirectoryScript:
 
     @m.context("When exit-on-error is set")
     @m.it("Exits with error status after printing the first error")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_exit_on_error(self, mock_iter_diff_directory: MagicMock, capsys):
-        mock_iter_diff_directory.return_value = [
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_exit_on_error(self, mock_iter_diff_paths: MagicMock, capsys):
+        mock_iter_diff_paths.return_value = [
             diff.DiffRow(diff.STATUS_ERROR, "a.txt", diff.KIND_FILE),
             diff.DiffRow(diff.STATUS_SAME, "b.txt", diff.KIND_FILE),
         ]
@@ -559,9 +722,9 @@ class TestDiffDirectoryScript:
 
     @m.context("When diffing raises an exception")
     @m.it("Exits with error status")
-    @patch("npg_irods.cli.diff_directory.iter_diff_directory", autospec=True)
-    def test_main_diff_exception(self, mock_iter_diff_directory: MagicMock):
-        mock_iter_diff_directory.side_effect = ValueError("bad diff")
+    @patch("npg_irods.cli.irods_diff.iter_diff_paths", autospec=True)
+    def test_main_diff_exception(self, mock_iter_diff_paths: MagicMock):
+        mock_iter_diff_paths.side_effect = ValueError("bad diff")
 
         with pytest.raises(SystemExit) as exit_info:
             self._main(["directory", "/collection"])
@@ -570,7 +733,7 @@ class TestDiffDirectoryScript:
 
     @m.context("When checksums file cannot be read")
     @m.it("Exits with error status")
-    @patch("npg_irods.cli.diff_directory.make_get_checksum", autospec=True)
+    @patch("npg_irods.cli.irods_diff.make_get_checksum", autospec=True)
     def test_main_checksums_file_exception(self, mock_make_get_checksum: MagicMock):
         mock_make_get_checksum.side_effect = ValueError("bad checksums")
 
@@ -583,5 +746,5 @@ class TestDiffDirectoryScript:
 
     @staticmethod
     def _main(args: list[str]):
-        with patch("sys.argv", ["diff-directory"] + args):
-            diff_directory_script.main()
+        with patch("sys.argv", ["irods-diff"] + args):
+            irods_diff_script.main()

@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Compare local directories with iRODS collections."""
+"""Compare local filesystem paths with iRODS paths."""
 
 import re
 from collections.abc import Callable, Iterator
@@ -138,6 +138,106 @@ def _is_top_level_file(entry: DiffEntry) -> bool:
     return entry.kind == KIND_FILE and "/" not in PurePath(entry.path).as_posix()
 
 
+def diff_paths(
+    local_path: Path | str,
+    irods_path: PurePath | str,
+    local_checksum: Callable[[Path | str], str] | None = None,
+    filter_fn: Callable[[DiffEntry], bool] | None = None,
+    num_clients: int = 1,
+    no_recurse_missing_dirs: bool = False,
+) -> list[DiffRow]:
+    """Compare a local path with an iRODS path."""
+    return list(
+        iter_diff_paths(
+            local_path,
+            irods_path,
+            local_checksum=local_checksum,
+            filter_fn=filter_fn,
+            num_clients=num_clients,
+            no_recurse_missing_dirs=no_recurse_missing_dirs,
+        )
+    )
+
+
+def iter_diff_paths(
+    local_path: Path | str,
+    irods_path: PurePath | str,
+    local_checksum: Callable[[Path | str], str] | None = None,
+    filter_fn: Callable[[DiffEntry], bool] | None = None,
+    num_clients: int = 1,
+    no_recurse_missing_dirs: bool = False,
+) -> Iterator[DiffRow]:
+    """Yield comparison rows for a local path and an iRODS path."""
+    local_path = Path(local_path)
+    irods_path = PurePath(irods_path)
+
+    local_exists = local_path.exists()
+    irods_type = rods_path_type(irods_path.as_posix())
+
+    if not local_exists and irods_type is None:
+        raise FileNotFoundError(
+            f"Neither local path nor iRODS path exists: {local_path}, {irods_path}"
+        )
+
+    if local_exists:
+        if local_path.is_dir():
+            local_type = KIND_DIRECTORY
+        elif local_path.is_file():
+            local_type = KIND_FILE
+        else:
+            raise ValueError(f"Unsupported local path type: {local_path}")
+    else:
+        local_type = None
+
+    directory_comparison = (
+        local_type == KIND_DIRECTORY and irods_type in (Collection, None)
+    ) or (local_type is None and irods_type == Collection)
+    file_comparison = (
+        local_type == KIND_FILE and irods_type in (DataObject, None)
+    ) or (local_type is None and irods_type == DataObject)
+
+    if directory_comparison:
+        yield from _iter_diff_directory(
+            local_path,
+            irods_path,
+            local_exists,
+            irods_type,
+            local_checksum,
+            filter_fn,
+            num_clients,
+            no_recurse_missing_dirs,
+        )
+        return
+
+    if file_comparison:
+        if filter_fn is not None or no_recurse_missing_dirs:
+            raise ValueError(
+                "Filtering and --no-recurse-missing-dirs are only supported for "
+                "directory and collection comparisons"
+            )
+
+        yield from _iter_diff_file(
+            local_path,
+            irods_path,
+            local_exists,
+            irods_type,
+            local_checksum,
+            num_clients,
+        )
+        return
+
+    local_description = local_type or "missing path"
+    irods_description = (
+        "collection"
+        if irods_type == Collection
+        else "data object" if irods_type == DataObject else "missing path"
+    )
+    raise ValueError(
+        f"Cannot compare local {local_description} with iRODS {irods_description}: "
+        f"{local_path}, {irods_path}"
+    )
+
+
 def diff_directory(
     local_root: Path | str,
     irods_root: PurePath | str,
@@ -183,6 +283,30 @@ def iter_diff_directory(
     if irods_type is not None and irods_type != Collection:
         raise ValueError(f"iRODS path is not a collection: {irods_root}")
 
+    yield from _iter_diff_directory(
+        local_root,
+        irods_root,
+        local_exists,
+        irods_type,
+        local_checksum,
+        filter_fn,
+        num_clients,
+        no_recurse_missing_dirs,
+    )
+
+
+def _iter_diff_directory(
+    local_root: Path,
+    irods_root: PurePath,
+    local_exists: bool,
+    irods_type,
+    local_checksum: Callable[[Path | str], str] | None,
+    filter_fn: Callable[[DiffEntry], bool] | None,
+    num_clients: int,
+    no_recurse_missing_dirs: bool,
+) -> Iterator[DiffRow]:
+    """Yield directory comparison rows using precomputed root types."""
+
     local_dir = local_root if local_exists else None
 
     if irods_type is None:
@@ -211,6 +335,49 @@ def iter_diff_directory(
             pool,
             None,
         )
+
+
+def _iter_diff_file(
+    local_path: Path,
+    irods_path: PurePath,
+    local_exists: bool,
+    irods_type,
+    local_checksum: Callable[[Path | str], str] | None,
+    num_clients: int,
+) -> Iterator[DiffRow]:
+    """Yield one comparison row for a file and data object root."""
+    display_path = local_path.name
+    local = (
+        DiffEntry(
+            path=display_path,
+            kind=KIND_FILE,
+            size=lambda: local_path.stat().st_size,
+            checksum=_local_checksum_fn(local_path, local_checksum),
+            source_path=local_path,
+        )
+        if local_exists
+        else None
+    )
+
+    if irods_type is None:
+        yield _side_only_row(local, STATUS_LOCAL)
+        return
+
+    if local is None:
+        yield DiffRow(STATUS_IRODS, display_path, KIND_FILE)
+        return
+
+    with client_pool(maxsize=num_clients) as pool:
+        obj = DataObject(irods_path, check_type=False, pool=pool)
+        irods = DiffEntry(
+            path=display_path,
+            kind=KIND_FILE,
+            size=lambda: obj.size(),
+            checksum=lambda: obj.checksum(),
+            source_path=irods_path,
+        )
+
+        yield _compare_files(local, irods)
 
 
 def _iter_compare_dirs(
