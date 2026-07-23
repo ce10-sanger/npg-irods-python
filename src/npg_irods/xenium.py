@@ -119,13 +119,16 @@ def publish_result_dirs(
         try:
             publish_result_dir(i, p, remote_root, local_checksum=local_checksum)
 
+            num_published += 1
+
             if print_success:
-                num_published += 1
                 print(p, file=writer)
         except Exception as e:
             log.error(f"Failed to publish '{p}': {e}", i=i)
+
+            number_failed += 1
+
             if print_fail:
-                number_failed += 1
                 print(p, file=writer)
 
     return num_dirs, num_published, number_failed

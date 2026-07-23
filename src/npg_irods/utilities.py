@@ -1260,6 +1260,7 @@ def read_md5_file(path: Path) -> str:
             raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
         return md5
 
+
 class Md5sumsReader:
 
     def __init__(self, md5sums_path: Path):
@@ -1296,9 +1297,9 @@ class Md5sumsReader:
             line = line.strip()
             md5, path = line.split("  ", 1)
             if len(md5) != 32:
-                raise ValueError(
-                    f"MD5 checksum is not 32 characters: '{md5}'")
+                raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
             self._md5sums[Path(path)] = md5
+
 
 # TODO: Refactor
 def read_md5sums_file(path: Path) -> dict[Path, str]:

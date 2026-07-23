@@ -142,7 +142,9 @@ def publish_directory(
                 match item:
                     case Exception():
                         num_errors += 1
-                        log.error("Error publishing item", error=str(item), exc_info=item)
+                        log.error(
+                            "Error publishing item", error=str(item), exc_info=item
+                        )
                         if first_error is None:
                             first_error = item
                         continue
