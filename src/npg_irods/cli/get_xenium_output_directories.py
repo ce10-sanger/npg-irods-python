@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 from pathlib import Path
 import argparse
 import structlog
@@ -67,7 +68,12 @@ def main():
             logger().debug("Considering dirpath", dirpath=dirpath)
 
             if EXPERIMENT_FILENAME in filenames:
-                print(dirpath, file=writer)
+                try:
+                    print(dirpath, file=writer)
+                except BrokenPipeError:
+                    # Support being used in a pipeline with filtering
+                    # e.g. get-xenium-output-directories | head -n 1
+                    sys.exit(0)
 
     logger().info("Got Xenium output directories")
 

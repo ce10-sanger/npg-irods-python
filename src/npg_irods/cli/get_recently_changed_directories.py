@@ -168,7 +168,12 @@ def main():
 
                 num_filtered += 1
                 num_recent += 1
-                print(directory_path, file=writer)
+                try:
+                    print(directory_path, file=writer)
+                except BrokenPipeError:
+                    # Support being used in a pipeline with filtering
+                    # e.g. get-recently-changed-directories | head -n 1
+                    sys.exit(0)
                 logger().debug(
                     "Filtered in.",
                     directory=directory_path,
