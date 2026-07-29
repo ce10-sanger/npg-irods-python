@@ -117,7 +117,7 @@ def publish_result_dirs(
 
         num_dirs += 1
         try:
-            publish_result_dir(i, p, remote_root, local_checksum=local_checksum)
+            publish_result_dir(p, i, remote_root, local_checksum=local_checksum)
 
             num_published += 1
 
@@ -135,8 +135,8 @@ def publish_result_dirs(
 
 
 def publish_result_dir(
-    i: int,
     result_dir: Path,
+    result_dir_index: int,
     remote_root: PurePath,
     tries: int = 3,
     local_checksum: Callable[[str], bool] | None = None,
@@ -144,8 +144,8 @@ def publish_result_dir(
     """Publish one Xenium results directory to iRODS.
 
     Args:
-        i: Index of directory to publish (for logging).
         result_dir: Path to the Xenium result directory.
+        result_dir_index: Index of directory to publish (for logging).
         remote_root: iRODS path to the root of the Xenium results collection. This
             collection must exist.
         tries: Number of times to retry publishing if it fails.
@@ -168,7 +168,7 @@ def publish_result_dir(
 
     log.info(
         "Publishing Xenium result",
-        i=i,
+        i=result_dir_index,
         src=src.as_posix(),
         dest=dest.as_posix(),
         metadata=avus,
@@ -208,7 +208,7 @@ def publish_result_dir(
 
     log.info(
         "Publishing complete",
-        i=i,
+        i=result_dir_index,
         src=src.as_posix(),
         dest=dest.as_posix(),
         num_processed=num_processed,
