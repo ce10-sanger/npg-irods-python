@@ -115,7 +115,7 @@ def main():
 
                 if not ctimes:
                     num_failed += 1
-                    logger().warning(
+                    logger().error(
                         "No matching files.",
                         directory=directory_path,
                     )
@@ -154,7 +154,7 @@ def main():
 
                 change_period = latest_ctime_date - earliest_ctime_date
                 if change_period > timedelta(days=7):  # TODO: LATE_CHANGE_DAYS
-                    logger().warning(
+                    logger().error(
                         "Unexpected later change to file",
                         directory=directory_path,
                         change_period=change_period,
