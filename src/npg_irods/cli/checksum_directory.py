@@ -96,12 +96,9 @@ def main():
             num_files=num_files,
             num_checksummed=num_checksummed,
         )
-    except FileNotFoundError as e:
-        # TODO: How to output exception/filename without breaking expectations of log contract?
+    except FileNotFoundError:
         logger().exception(
             "File not found. If you're running under Singularity, check bind configuration (e.g. SINGULARITY_BIND, --bind). This is a common cause.",
-            filename=e.filename,
-            filename2=e.filename2,
         )
         sys.exit(1)
 
