@@ -27,6 +27,7 @@ from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.checksum import checksum_directory
+from npg_irods.cli import register_term_handling
 
 description = """
 A utility to calculate MD5 checksums for all files in a directory.
@@ -82,6 +83,8 @@ def main():
         json=args.log_json,
     )
     add_appinfo_structlog_processor()
+
+    register_term_handling()
 
     path = Path(args.directory)
     md5sums_path = Path(args.md5sums_path)

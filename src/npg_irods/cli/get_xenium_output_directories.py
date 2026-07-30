@@ -6,6 +6,7 @@ import structlog
 from npg.cli import add_logging_arguments, open_output
 from npg.log import configure_structlog
 from npg_irods import add_appinfo_structlog_processor, version
+from npg_irods.cli import register_term_handling
 from npg_irods.metadata.xenium import EXPERIMENT_FILENAME
 from npg_irods.utilities import sanitise_path
 
@@ -52,6 +53,8 @@ def main():
         json=args.log_json,
     )
     add_appinfo_structlog_processor()
+
+    register_term_handling()
 
     root_path = Path(sanitise_path(args.root))
     output_path = sanitise_path(args.output)

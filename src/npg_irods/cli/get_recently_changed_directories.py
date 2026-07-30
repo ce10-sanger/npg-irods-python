@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
+import signal
 from datetime import datetime, timedelta
 
 import operator
 
 import sys
+
+from npg_irods.cli import register_term_handling
 from npg_irods.system_calls import get_now, get_ctime, get_mtime
 
 from pathlib import Path
 import argparse
-import structlog
+from structlog.stdlib import get_logger, BoundLogger
 from npg.cli import add_logging_arguments, open_output, open_input
 from npg.log import configure_structlog
 from npg_irods import add_appinfo_structlog_processor, version
@@ -25,8 +28,8 @@ from npg_irods.utilities import sanitise_path
 description = """TODO"""
 
 
-def logger():
-    return structlog.get_logger(__name__)
+def logger() -> BoundLogger:
+    return get_logger(__name__)
 
 
 def main():
@@ -68,6 +71,8 @@ def main():
         json=args.log_json,
     )
     add_appinfo_structlog_processor()
+
+    register_term_handling()
 
     if not args.input:
         sys.exit("Error: Only input method supported at the moment")

@@ -18,3 +18,21 @@
 
 
 """Command line interface for npg-irods-python."""
+
+import signal
+from types import FrameType
+
+from structlog.stdlib import BoundLogger, get_logger
+
+
+def logger() -> BoundLogger:
+    return get_logger(__name__)
+
+
+def _handle_term(signum: int, frame: FrameType | None) -> None:
+    logger().critical("Received SIGTERM")
+    raise Exception("Received SIGTERM")
+
+
+def register_term_handling():
+    signal.signal(signal.SIGTERM, _handle_term)

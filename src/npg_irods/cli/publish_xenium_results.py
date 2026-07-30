@@ -27,6 +27,7 @@ from npg.cli import add_io_arguments, add_logging_arguments, open_input, open_ou
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
+from npg_irods.cli import register_term_handling
 from npg_irods.utilities import sanitise_path, read_md5_file, make_get_checksum
 from npg_irods.xenium import publish_result_dirs
 
@@ -111,6 +112,8 @@ def main():
         json=args.log_json,
     )
     add_appinfo_structlog_processor()
+
+    register_term_handling()
 
     input_path = sanitise_path(args.input)
     output_path = sanitise_path(args.output)
