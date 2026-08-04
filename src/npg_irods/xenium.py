@@ -21,7 +21,7 @@ from collections.abc import Iterator
 from pathlib import Path, PurePath
 
 from partisan.irods import AVU, Collection
-from structlog import get_logger
+from structlog.stdlib import get_logger
 
 from npg_irods.common import PlatformNamespace
 from npg_irods.exception import PublishingError
@@ -124,19 +124,19 @@ def publish_result_dirs(
     """
     num_dirs, num_published, number_failed = 0, 0, 0
 
-    for path in reader:
+    for i, path in enumerate(reader):
         p = Path(sanitise_path(path)).resolve()
 
         num_dirs += 1
         try:
-            publish_result_dir(p, remote_root)
+            publish_result_dir(p, remote_root, dir_index=i)
 
             num_published += 1
 
             if print_success:
                 print(p, file=writer)
         except Exception as e:
-            log.error(f"Failed to publish '{p}': {e}")
+            log.error(f"Failed to publish '{p}': {e}", dir_index=i)
 
             number_failed += 1
 
@@ -147,7 +147,10 @@ def publish_result_dirs(
 
 
 def publish_result_dir(
-    result_dir: Path, remote_root: PurePath, tries: int = 3
+    result_dir: Path,
+    remote_root: PurePath,
+    tries: int = 3,
+    dir_index: int | None = None,
 ) -> Collection:
     """Publish one Xenium results directory to iRODS.
 
@@ -156,6 +159,7 @@ def publish_result_dir(
         remote_root: iRODS path to the root of the Xenium results collection. This
             collection must exist.
         tries: Number of times to retry publishing if it fails.
+        dir_index: Index of directory to publish (for logging). Defaults to None.
 
     Returns:
         The iRODS collection containing the published results.
@@ -170,6 +174,7 @@ def publish_result_dir(
 
     log.info(
         "Publishing Xenium result",
+        dir_index=dir_index,
         src=src.as_posix(),
         dest=dest.as_posix(),
         metadata=avus,
@@ -177,7 +182,11 @@ def publish_result_dir(
 
     def filter_item(item: Path) -> bool:
         """Filter out symlinks and non-files/directories."""
-        return item.is_symlink() or not (item.is_file() or item.is_dir())
+        return (
+            item.is_symlink()
+            or not (item.is_file() or item.is_dir())
+            or item.name == ".DS_Store"
+        )
 
     num_items, num_processed, num_errors = publish_directory(
         src,
@@ -204,6 +213,7 @@ def publish_result_dir(
 
     log.info(
         "Publishing complete",
+        dir_index=dir_index,
         src=src.as_posix(),
         dest=dest.as_posix(),
         num_processed=num_processed,

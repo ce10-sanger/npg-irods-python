@@ -21,7 +21,7 @@ from pathlib import Path, PurePath
 from typing import Callable
 
 from partisan.irods import AC, AVU, Collection, DataObject, client_pool, Permission
-from structlog import get_logger
+from structlog.stdlib import get_logger
 
 from npg_irods.common import update_metadata, update_permissions
 from npg_irods.exception import PublishingError
@@ -142,7 +142,9 @@ def publish_directory(
                 match item:
                     case Exception():
                         num_errors += 1
-                        log.error("Error publishing item", error=str(item))
+                        log.error(
+                            "Error publishing item", error=str(item), exc_info=item
+                        )
                         if first_error is None:
                             first_error = item
                         continue
