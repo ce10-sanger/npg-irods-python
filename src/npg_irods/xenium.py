@@ -21,7 +21,7 @@ import json
 from pathlib import Path, PurePath
 
 from partisan.irods import AVU, Collection
-from structlog import get_logger
+from structlog.stdlib import get_logger
 
 from npg_irods.common import PlatformNamespace
 from npg_irods.exception import PublishingError
@@ -117,14 +117,16 @@ def publish_result_dirs(
 
         num_dirs += 1
         try:
-            publish_result_dir(p, i, remote_root, local_checksum=local_checksum)
+            publish_result_dir(
+                p, remote_root, local_checksum=local_checksum, dir_index=i
+            )
 
             num_published += 1
 
             if print_success:
                 print(p, file=writer)
         except Exception as e:
-            log.error(f"Failed to publish '{p}': {e}", i=i)
+            log.error(f"Failed to publish '{p}': {e}", dir_index=i)
 
             number_failed += 1
 
@@ -136,16 +138,15 @@ def publish_result_dirs(
 
 def publish_result_dir(
     result_dir: Path,
-    result_dir_index: int,
     remote_root: PurePath,
     tries: int = 3,
     local_checksum: Callable[[str], bool] | None = None,
+    dir_index: int | None = None,
 ) -> Collection:
     """Publish one Xenium results directory to iRODS.
 
     Args:
         result_dir: Path to the Xenium result directory.
-        result_dir_index: Index of directory to publish (for logging).
         remote_root: iRODS path to the root of the Xenium results collection. This
             collection must exist.
         tries: Number of times to retry publishing if it fails.
@@ -154,6 +155,7 @@ def publish_result_dir(
             are large, it may improve the publishing time to use this argument to
             supply pre-caculated checksums. The callable should take a single argument
             (the file path) and return the checksum as a string.
+        dir_index: Index of directory to publish (for logging). Defaults to None.
 
     Returns:
         The iRODS collection containing the published results.
@@ -168,7 +170,7 @@ def publish_result_dir(
 
     log.info(
         "Publishing Xenium result",
-        i=result_dir_index,
+        dir_index=dir_index,
         src=src.as_posix(),
         dest=dest.as_posix(),
         metadata=avus,
@@ -208,7 +210,7 @@ def publish_result_dir(
 
     log.info(
         "Publishing complete",
-        i=result_dir_index,
+        dir_index=dir_index,
         src=src.as_posix(),
         dest=dest.as_posix(),
         num_processed=num_processed,
