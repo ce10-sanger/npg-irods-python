@@ -19,11 +19,37 @@
 
 
 import importlib.metadata
+import inspect
 import sys
+from functools import wraps
 
 import structlog
+from partisan.irods import Replica
 
 __version__ = importlib.metadata.version("npg-irods-python")
+
+
+def _patch_partisan_replica_physical_path():
+    """Allow partisan 4.3.x Replica to ignore baton physical_path fields."""
+    if getattr(Replica.__init__, "_npg_accepts_physical_path", False):
+        return
+
+    if "physical_path" in inspect.signature(Replica.__init__).parameters:
+        return
+
+    original_init = Replica.__init__
+
+    @wraps(original_init)
+    def _init(self, *args, physical_path=None, **kwargs):
+        original_init(self, *args, **kwargs)
+        if physical_path is not None:
+            self.physical_path = physical_path
+
+    _init._npg_accepts_physical_path = True
+    Replica.__init__ = _init
+
+
+_patch_partisan_replica_physical_path()
 
 
 # If this proves generally useful, it could be moved to npg-python-lib

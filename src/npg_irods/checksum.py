@@ -23,6 +23,17 @@ from pathlib import Path
 from npg_irods.utilities import read_md5sums_file, log
 
 
+def calculate_file_checksum(path: Path) -> str:
+    """Calculate the MD5 checksum of a file."""
+    log.debug("Calculating checksum.", path=path)
+    with path.open("rb") as f:
+        digest = file_digest(f, "md5")
+
+    md5sum = digest.hexdigest()
+    log.debug("Calculated checksum.", path=path, md5sum=md5sum)
+    return md5sum
+
+
 def checksum_directory(path: Path, md5sums_path: Path):
     """Calculate MD5 checksums for all files in a directory and write to file.
 
@@ -62,13 +73,8 @@ def checksum_directory(path: Path, md5sums_path: Path):
                     )
                     continue
 
-                with open(path, "rb") as f:
-                    digest = file_digest(f, "md5")
-
-                md5sum = digest.hexdigest()
+                md5sum = calculate_file_checksum(path)
                 md5sums_file.write(f"{md5sum}  {path}\n")
-
-                log.debug("Calculated checksum.", path=path, md5sum=md5sum)
 
                 num_checksummed += 1
 
