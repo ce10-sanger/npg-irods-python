@@ -26,7 +26,7 @@ from npg_irods.system_calls import get_now, get_ctime, get_mtime
 from pathlib import Path
 import argparse
 import structlog
-from npg.cli import add_logging_arguments, open_output, open_input
+from npg.cli import add_logging_arguments, open_output, open_input, add_io_arguments
 from npg.log import configure_structlog
 from npg_irods import add_appinfo_structlog_processor, version
 from npg_irods.utilities import sanitise_path
@@ -34,7 +34,6 @@ from npg_irods.utilities import sanitise_path
 # TODO: Docs
 # TODO: Where should this live?
 # TODO: Expected runtime
-# TODO: add_input_argument, add_output_argument to python lib
 # TODO: Structure into a utility
 # TODO: Timezones
 
@@ -49,24 +48,10 @@ def main():
     parser = argparse.ArgumentParser(
         description=description, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser = add_logging_arguments(parser)
 
-    inputs = parser.add_mutually_exclusive_group()
+    add_io_arguments(parser)
 
-    inputs.add_argument(
-        "--input",
-        help="Input file",
-        type=str,
-        default="-",
-    )
-    # TODO: Root
-
-    parser.add_argument(
-        "--output",
-        help="Output file",
-        type=str,
-        default="-",
-    )
+    add_logging_arguments(parser)
 
     parser.add_argument(
         "--version",
@@ -84,9 +69,6 @@ def main():
         json=args.log_json,
     )
     add_appinfo_structlog_processor()
-
-    if not args.input:
-        sys.exit("Error: Only input method supported at the moment")
 
     input_path = sanitise_path(args.input)
     output_path = sanitise_path(args.output)
