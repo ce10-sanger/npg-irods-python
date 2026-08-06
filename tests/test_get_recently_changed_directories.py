@@ -16,12 +16,57 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from datetime import datetime
+from os import PathLike
 
 from pathlib import Path
+from typing import AnyStr
 
 from unittest.mock import patch
 
 from npg_irods.cli import get_recently_changed_directories
+
+class FakeFilesystem:
+
+    def __init__(self, root: Path, mock_get_ctime):
+        self.root = root
+        mock_get_ctime.side_effect = mock_get_ctime
+        self.times = {}
+
+    def create_directory(self, path: AnyStr | PathLike, mtime: datetime | None = None, ctime: datetime | None = None):
+        directory_path = self.root / path
+
+        # if not directory_path.exists():
+        #     self.create_directory(directory_path.parent)
+        #
+        # directory_path.mkdir(parents=False, exist_ok=True)
+
+        directory_path.mkdir(parents=False, exist_ok=False)
+
+        self.times[directory_path] = {
+            "mtime": mtime,
+            "ctime": ctime,
+        } # TODO: Clean up
+
+    def create_file(self, path: AnyStr | PathLike, mtime: datetime | None = None, ctime: datetime | None = None):
+        file_path = self.root / path
+
+        # if not file_path.parent.exists():
+        #     self.create_directory(file_path.parent)
+        #
+        # file_path.touch(exist_ok=False)
+
+        file_path.touch(exist_ok=False)
+
+        self.times[file_path] = {
+            "mtime": mtime,
+            "ctime": ctime,
+        } # TODO: Clean up
+
+    def _get_ctime(self, path):
+        ctime =  self.times[path]["ctime"]
+        if not ctime:
+            raise Exception("Test error")
+        return ctime
 
 
 class TestGetRecentlyChangedDirectoriesScript:
@@ -33,6 +78,8 @@ class TestGetRecentlyChangedDirectoriesScript:
     ):
         # Arrange
 
+        fs = FakeFilesystem(tmp_path, mock_get_ctime)
+
         first_monday_3am = datetime(2024, 1, 1, 3, 0, 0)
         second_monday_3am = datetime(2024, 1, 8, 3, 0, 0)
         second_sunday_3am = datetime(2024, 1, 14, 3, 0, 0)
@@ -43,9 +90,11 @@ class TestGetRecentlyChangedDirectoriesScript:
 
         # Directory case 1: Changed recently
         recent = tmp_path / "recent"
-        recent.mkdir()
-        (recent / "recent.txt").touch()
-        ctimes[(recent / "recent.txt")] = second_monday_3am.timestamp()
+        # recent.mkdir()
+        # (recent / "recent.txt").touch()
+        # ctimes[(recent / "recent.txt")] = second_monday_3am.timestamp()
+        fs.create_directory(recent)
+        fs.create_file(recent / "recent.txt", mtime=None, ctime=second_monday_3am)
 
         # Directory case 2: Not changed recently
         not_recent = tmp_path / "not_recent"
