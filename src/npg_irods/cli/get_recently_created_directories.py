@@ -174,6 +174,8 @@ def main():
                     ):
                         continue
 
+                    # TODO: TypeError: can't compare offset-naive and offset-aware datetimes
+                    # TODO: How do timezones come into this?
                     ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path))
 
                 # TODO: Expect n files
