@@ -25,6 +25,7 @@ from unittest.mock import patch
 
 from npg_irods.cli import get_recently_created_directories
 
+
 class FakeFilesystem:
 
     def __init__(self, root: Path, mock_get_ctime):
@@ -57,7 +58,7 @@ class FakeFilesystem:
         self.ctimes[file_path] = ctime
 
     def _get_ctime(self, path):
-        ctime =  self.ctimes[path]
+        ctime = self.ctimes[path]
         if not ctime:
             raise Exception("Test error")
         return ctime

@@ -16,19 +16,29 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # @author Calum Eadie <ce10@sanger.ac.uk>
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import operator
 
 import sys
-from npg_irods.system_calls import get_now, get_ctime, get_mtime
+from npg_irods.system_calls import get_now, get_ctime
 
 from pathlib import Path
 import argparse
 import structlog
-from npg.cli import add_logging_arguments, open_output, open_input, add_io_arguments
+from npg.cli import (
+    add_logging_arguments,
+    open_output,
+    open_input,
+    add_io_arguments,
+    parse_iso_date,
+)
 from npg.log import configure_structlog
-from npg_irods import add_appinfo_structlog_processor, version
+from npg_irods import (
+    add_appinfo_structlog_processor,
+    version,
+    parse_timedelta_from_hours,
+)
 from npg_irods.utilities import sanitise_path
 
 # TODO: Docs
@@ -69,6 +79,7 @@ history:
 
 # TODO: Document ctime, birthtime etc
 
+
 def logger():
     return structlog.get_logger(__name__)
 
@@ -81,6 +92,36 @@ def main():
     add_io_arguments(parser)
 
     add_logging_arguments(parser)
+
+    # We need to deviate from npg.cli.add_date_range_arguments
+    begin_delta_days = 7
+    parser.add_argument(
+        "--begin-date",
+        help="Limit to after this date. Defaults to 7 days ago. The argument must "
+        "be an ISO8601 UTC date or date and time "
+        "e.g. 2022-01-30, 2022-01-30T11:11:03Z",
+        type=parse_iso_date,
+        default=get_now(timezone.utc) - timedelta(days=begin_delta_days),
+    )
+    end_delta_hours = 1
+    parser.add_argument(
+        "--end-date",
+        help="Limit to before this date. Defaults to 1 hour ago providing a "
+        "level of mitigation against in progress uploads. The argument must "
+        "be an ISO8601 UTC date or date and time "
+        "e.g. 2022-01-30, 2022-01-30T11:11:03Z",
+        type=parse_iso_date,
+        default=get_now(timezone.utc) - timedelta(hours=end_delta_hours),
+    )
+
+    parser.add_argument(
+        "--max-creation-period",
+        help="Filter out and warn about directories where the period between "
+        "the earliest and latest file creation exceeds a specified period. "
+        "Defaults to 6 hours. The argument must be an integer number of hours.",
+        type=parse_timedelta_from_hours,
+        default=timedelta(hours=6),
+    )
 
     parser.add_argument(
         "--version",
@@ -104,9 +145,9 @@ def main():
 
     logger().info("Getting recently created directories")
 
-    begin = get_now() - timedelta(days=7)
-    # Safety against in progress uploads
-    end = get_now() - timedelta(hours=1)
+    begin: datetime = args.begin_date
+    end: datetime = args.end_date
+    max_creation_period: timedelta = args.max_creation_period
 
     logger().debug("Filtering", begin=begin, end=end)
 
@@ -136,7 +177,6 @@ def main():
                     ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path))
 
                 # TODO: Expect n files
-                # TODO: mtimes
 
                 if not ctimes:
                     num_failed += 1
@@ -178,7 +218,7 @@ def main():
                     continue
 
                 creation_period = latest_ctime_date - earliest_ctime_date
-                if creation_period > timedelta(days=7):  # TODO: LATE_CHANGE_DAYS
+                if creation_period > max_creation_period:
                     logger().warning(
                         "Unexpected later change to file",
                         directory=directory_path,
