@@ -23,16 +23,16 @@ from typing import AnyStr
 
 from unittest.mock import patch
 
-from npg_irods.cli import get_recently_changed_directories
+from npg_irods.cli import get_recently_created_directories
 
 class FakeFilesystem:
 
     def __init__(self, root: Path, mock_get_ctime):
         self.root = root
         mock_get_ctime.side_effect = mock_get_ctime
-        self.times = {}
+        self.ctimes = {}
 
-    def create_directory(self, path: AnyStr | PathLike, mtime: datetime | None = None, ctime: datetime | None = None):
+    def create_directory(self, path: AnyStr | PathLike, ctime: datetime | None = None):
         directory_path = self.root / path
 
         # if not directory_path.exists():
@@ -42,12 +42,9 @@ class FakeFilesystem:
 
         directory_path.mkdir(parents=False, exist_ok=False)
 
-        self.times[directory_path] = {
-            "mtime": mtime,
-            "ctime": ctime,
-        } # TODO: Clean up
+        self.ctimes[directory_path] = ctime
 
-    def create_file(self, path: AnyStr | PathLike, mtime: datetime | None = None, ctime: datetime | None = None):
+    def create_file(self, path: AnyStr | PathLike, ctime: datetime | None = None):
         file_path = self.root / path
 
         # if not file_path.parent.exists():
@@ -57,13 +54,10 @@ class FakeFilesystem:
 
         file_path.touch(exist_ok=False)
 
-        self.times[file_path] = {
-            "mtime": mtime,
-            "ctime": ctime,
-        } # TODO: Clean up
+        self.ctimes[file_path] = ctime
 
     def _get_ctime(self, path):
-        ctime =  self.times[path]["ctime"]
+        ctime =  self.ctimes[path]
         if not ctime:
             raise Exception("Test error")
         return ctime
@@ -71,9 +65,9 @@ class FakeFilesystem:
 
 class TestGetRecentlyChangedDirectoriesScript:
 
-    @patch("get_recently_changed_directories.system_calls.get_ctime")
-    @patch("get_recently_changed_directories.system_calls.get_now")
-    def test_get_recently_changed_directories(
+    @patch("get_recently_created_directories.system_calls.get_ctime")
+    @patch("get_recently_created_directories.system_calls.get_now")
+    def test_get_recently_created_directories(
         self, mock_get_now, mock_get_ctime, tmp_path: Path
     ):
         # Arrange
@@ -88,23 +82,23 @@ class TestGetRecentlyChangedDirectoriesScript:
 
         ctimes = {}
 
-        # Directory case 1: Changed recently
+        # Directory case 1: Created recently
         recent = tmp_path / "recent"
         # recent.mkdir()
         # (recent / "recent.txt").touch()
         # ctimes[(recent / "recent.txt")] = second_monday_3am.timestamp()
         fs.create_directory(recent)
-        fs.create_file(recent / "recent.txt", mtime=None, ctime=second_monday_3am)
+        fs.create_file(recent / "recent.txt", ctime=second_monday_3am)
 
-        # Directory case 2: Not changed recently
+        # Directory case 2: Not created recently
         not_recent = tmp_path / "not_recent"
         not_recent.mkdir()
         (not_recent / "not_recent.txt").touch()
         ctimes[(recent / "recent.txt")] = first_monday_3am.timestamp()
 
-        # Directory case 3: Changes currently happening
+        # Directory case 3: Creation currently happening
 
-        # Directory case 4: Change after initial change
+        # Directory case 4: Change after initial creation
 
         # Directory case 5: Empty
         empty = tmp_path / "empty"
@@ -122,5 +116,5 @@ class TestGetRecentlyChangedDirectoriesScript:
 
     @staticmethod
     def _main(args: list[str]):
-        with patch("sys.argv", ["get-recently-changed-directories"] + args):
-            get_recently_changed_directories.main()
+        with patch("sys.argv", ["get-recently-created-directories"] + args):
+            get_recently_created_directories.main()

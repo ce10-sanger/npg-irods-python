@@ -38,14 +38,16 @@ from npg_irods.utilities import sanitise_path
 # TODO: Timezones
 
 description = """
-Filters a list of directories to those recently changed.
+Filters a list of directories to those recently created.
 
 Reads directory paths from a file or STDIN, one per line, filters and writes
 directory paths to a file or STDOUT, one per line.
 
 Considers all files at any depth below directory.
 
-Compares by mtime (default) or ctime (see note below).
+Compares by ctime. Tool is only applicable to filesystems where
+ctime a creation time (i.e. some NFS filesystems depending on configuration) and
+not last metadata change (i.e. a typical Unix filesystem).   
 
 Directories with "too recent" changes can be excluded. For example, to
 heuristically guard against in progress transfers. 
@@ -61,10 +63,11 @@ notes:
   Error Handling: TODO
   Symbolic Links: Follows file links. Does not follow directory links (to avoid filesystem loops).
   Exclusions: Excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files
-  ctime: TODO
   
 history:
 """
+
+# TODO: Document ctime, birthtime etc
 
 def logger():
     return structlog.get_logger(__name__)
@@ -99,7 +102,7 @@ def main():
     input_path = sanitise_path(args.input)
     output_path = sanitise_path(args.output)
 
-    logger().info("Getting recently changed directories")
+    logger().info("Getting recently created directories")
 
     begin = get_now() - timedelta(days=7)
     # Safety against in progress uploads
@@ -116,7 +119,6 @@ def main():
 
                 num_dirs += 1
 
-                mtimes: dict[Path, datetime] = {}
                 ctimes: dict[Path, datetime] = {}
 
                 for file_path in directory_path.rglob("*"):
@@ -131,7 +133,6 @@ def main():
                     ):
                         continue
 
-                    mtimes[file_path] = datetime.fromtimestamp(get_mtime(file_path))
                     ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path))
 
                 # TODO: Expect n files
@@ -156,7 +157,7 @@ def main():
                 if too_old:
                     num_filtered += 1
                     logger().debug(
-                        "Filtered out: too old. Latest ctime before beginning of recent change window.",
+                        "Filtered out: too old. Latest ctime before beginning of recent creation window.",
                         directory=directory_path,
                         begin=begin,
                         latest_ctime_path=latest_ctime_path,
@@ -168,7 +169,7 @@ def main():
                 if too_new:
                     num_filtered += 1
                     logger().info(
-                        "Filtered out: too new (avoid in progress). Latest ctime after end of recent change window.",
+                        "Filtered out: too new (avoid in progress). Latest ctime after end of recent creation window.",
                         directory=directory_path,
                         begin=begin,
                         latest_ctime_path=latest_ctime_path,
@@ -176,12 +177,12 @@ def main():
                     )
                     continue
 
-                change_period = latest_ctime_date - earliest_ctime_date
-                if change_period > timedelta(days=7):  # TODO: LATE_CHANGE_DAYS
+                creation_period = latest_ctime_date - earliest_ctime_date
+                if creation_period > timedelta(days=7):  # TODO: LATE_CHANGE_DAYS
                     logger().warning(
                         "Unexpected later change to file",
                         directory=directory_path,
-                        change_period=change_period,
+                        creation_period=creation_period,
                         earliest_ctime_path=earliest_ctime_path,
                         earliest_ctime_date=earliest_ctime_date,
                         latest_ctime_path=latest_ctime_path,
@@ -196,20 +197,20 @@ def main():
                     print(directory_path, file=writer)
                 except BrokenPipeError:
                     # Support being used in a pipeline with filtering
-                    # e.g. get-recently-changed-directories | head -n 1
+                    # e.g. get-recently-created-directories | head -n 1
                     sys.exit(0)
                 logger().debug(
                     "Filtered in.",
                     directory=directory_path,
                     begin=begin,
                     end=end,
-                    change_period=change_period,
+                    creation_period=creation_period,
                     latest_ctime_path=latest_ctime_path,
                     latest_ctime_date=latest_ctime_date,
                 )
 
     logger().info(
-        "Got recently changed directories",
+        "Got recently created directories",
         num_dirs=num_dirs,
         num_filtered=num_filtered,
         num_recent=num_recent,
