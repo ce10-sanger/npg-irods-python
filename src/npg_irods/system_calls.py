@@ -17,11 +17,11 @@
 
 from pathlib import Path
 
-from datetime import datetime, tzinfo
+from datetime import datetime, UTC
 
 
-def get_now(tz: tzinfo | None = None):
-    return datetime.now(tz=tz)
+def get_now_utc() -> datetime:
+    return datetime.now(UTC)
 
 
 def get_ctime(path: Path) -> float:

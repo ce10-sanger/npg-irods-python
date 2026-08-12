@@ -16,12 +16,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # @author Calum Eadie <ce10@sanger.ac.uk>
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 
 import operator
 
-import sys
-from npg_irods.system_calls import get_now, get_ctime
+from npg_irods.system_calls import get_now_utc, get_ctime
 
 from pathlib import Path
 import argparse
@@ -101,7 +100,7 @@ def main():
         "be an ISO8601 UTC date or date and time "
         "e.g. 2022-01-30, 2022-01-30T11:11:03Z",
         type=parse_iso_date,
-        default=get_now(timezone.utc) - timedelta(days=begin_delta_days),
+        default=get_now_utc() - timedelta(days=begin_delta_days),
     )
     end_delta_hours = 1
     parser.add_argument(
@@ -111,7 +110,7 @@ def main():
         "be an ISO8601 UTC date or date and time "
         "e.g. 2022-01-30, 2022-01-30T11:11:03Z",
         type=parse_iso_date,
-        default=get_now(timezone.utc) - timedelta(hours=end_delta_hours),
+        default=get_now_utc() - timedelta(hours=end_delta_hours),
     )
 
     parser.add_argument(
@@ -153,7 +152,7 @@ def main():
 
     with open_input(input_path, encoding="utf-8") as reader:
         with open_output(output_path, encoding="utf-8") as writer:
-            num_dirs, num_filtered, num_recent, num_failed = 0, 0, 0, 0
+            num_dirs, num_filtered, num_recent, num_errors = 0, 0, 0, 0
 
             for line in reader:
                 directory_path = Path(sanitise_path(line))
@@ -176,12 +175,14 @@ def main():
 
                     # TODO: TypeError: can't compare offset-naive and offset-aware datetimes
                     # TODO: How do timezones come into this?
-                    ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path))
+                    ctimes[file_path] = datetime.fromtimestamp(
+                        get_ctime(file_path), UTC
+                    )
 
                 # TODO: Expect n files
 
                 if not ctimes:
-                    num_failed += 1
+                    num_errors += 1
                     logger().warning(
                         "No matching files.",
                         directory=directory_path,
@@ -230,7 +231,7 @@ def main():
                         latest_ctime_path=latest_ctime_path,
                         latest_ctime_date=latest_ctime_date,
                     )
-                    num_failed += 1
+                    num_errors += 1
                     continue
 
                 num_filtered += 1
@@ -251,7 +252,7 @@ def main():
         num_dirs=num_dirs,
         num_filtered=num_filtered,
         num_recent=num_recent,
-        num_failed=num_failed,
+        num_errors=num_errors,
     )
     # TODO: Error handling
 
