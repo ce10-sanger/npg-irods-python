@@ -41,11 +41,6 @@ from npg_irods import (
 )
 from npg_irods.utilities import sanitise_path
 
-# TODO: Docs
-# TODO: Where should this live?
-# TODO: Expected runtime
-# TODO: Structure into a utility
-# TODO: Timezones
 
 description = """
 Filters a list of directories to those recently created.
@@ -74,7 +69,7 @@ notes:
   Symbolic Links: Follows file links. Does not follow directory links (to avoid filesystem loops).
   Exclusions: Excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files
   
-history:
+history: TODO
 """
 
 # TODO: Document ctime, birthtime etc
@@ -104,6 +99,7 @@ def get_recently_created_directories(
             if not file_path.is_file():
                 continue
 
+            # TODO: Test
             # TODO: exclude_patterns?
             # TODO: Share common
             if file_path.suffix.lower() == ".md5" or file_path.name == ".DS_Store":

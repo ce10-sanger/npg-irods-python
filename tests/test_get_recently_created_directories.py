@@ -80,6 +80,7 @@ class FakeFilesystem:
         return ctime
 
 
+# TODO: @m
 @m.describe("get-recently-created-directories (script)")
 class TestGetRecentlyCreatedDirectoriesScript:
 
@@ -488,3 +489,47 @@ class TestGetRecentlyCreatedDirectories:
         assert num_filtered == 1
         assert num_recent == 1
         assert num_errors == 1
+
+    @m.it("Should excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files")
+    @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
+    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
+    def test_ignore(
+            self,
+            mock_get_now_utc: Mock,
+            mock_get_ctime: Mock,
+            tmp_path: Path,
+            caplog: LogCaptureFixture,
+    ):
+        # Arrange
+        fs = FakeFilesystem(tmp_path, mock_get_ctime)
+
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
+
+        recent = fs.create_directory("recent", file_ctimes=[SECOND_MONDAY_3AM])
+        # Should be ignored and folder not be categorised as being created
+        fs.create_file("recent/checksum.md5", SECOND_SUNDAY_3AM)
+        fs.create_file("recent/.DS_Store", SECOND_SUNDAY_3AM)
+        directories = [str(recent)]
+
+        # Act
+        with caplog.at_level("DEBUG"):
+            with StringIO("\n".join(directories)) as reader:
+                with StringIO() as writer:
+                    num_dirs, num_filtered, num_recent, num_errors = (
+                        get_recently_created_directories.get_recently_created_directories(
+                            reader,
+                            writer,
+                            begin=FIRST_SUNDAY_3AM,
+                            end=SECOND_SUNDAY_3AM - timedelta(hours=1),
+                            max_creation_period=timedelta(hours=6),
+                        )
+                    )
+                    recent_paths = writer.getvalue().split()
+
+        # Assert
+        assert recent_paths == [str(recent)]
+
+        assert num_dirs == 1
+        assert num_filtered == 1
+        assert num_recent == 1
+        assert num_errors == 0
