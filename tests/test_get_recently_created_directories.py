@@ -38,6 +38,7 @@ SECOND_SUNDAY_3AM = datetime(2024, 1, 14, 3, 0, 0, tzinfo=UTC)
 
 
 class FakeFilesystem:
+    """Provides ability to mock ctime."""
 
     def __init__(self, root: Path, mock_get_ctime):
         self.root = root

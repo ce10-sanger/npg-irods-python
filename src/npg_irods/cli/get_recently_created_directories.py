@@ -67,12 +67,14 @@ epilog = """
 notes:
   Error Handling: Continues to next directory on error.
   Symbolic Links: Follows file links. Does not follow directory links (to avoid filesystem loops).
-  Exclusions: Excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files
+  Exclusions: Excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files.
   
-history: TODO
+history:
+  We have previously created systems that find recently modified directories, for
+  example in publishing Fluidigm and BioNano.
+  For Xenium, when operators copy Xenium outputs from instrument onto NFS, instrument
+  mtime is preserved whereas ctime is the time files were created on NFS.
 """
-
-# TODO: Document ctime, birthtime etc
 
 
 def logger():
@@ -99,12 +101,15 @@ def get_recently_created_directories(
                 if not file_path.is_file():
                     continue
 
-                # TODO: Test
-                # TODO: exclude_patterns?
-                # TODO: Share common
                 if file_path.suffix.lower() == ".md5" or file_path.name == ".DS_Store":
                     continue
 
+                # Python is moving towards depreciating ctime and making birthtime available.
+                # Reading NFS drive with ctime = creation time configuration from Python
+                # running on Linux is a corner case. st_ctime depreciated on windows
+                # in favour of st_birthtime. st_ctime documented as time of most recent
+                # metadata change but different in this corner case.
+                # See https://docs.python.org/3/library/os.html#os.stat_result.st_ctime.
                 ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path), UTC)
 
             if not ctimes:
