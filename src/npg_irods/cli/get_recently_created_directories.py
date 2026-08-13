@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # @author Calum Eadie <ce10@sanger.ac.uk>
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import datetime, timedelta, UTC
 
 import operator
 from typing import BinaryIO, TextIO, Any
@@ -109,11 +109,7 @@ def get_recently_created_directories(
             if file_path.suffix.lower() == ".md5" or file_path.name == ".DS_Store":
                 continue
 
-            # TODO: TypeError: can't compare offset-naive and offset-aware datetimes
-            # TODO: How do timezones come into this?
             ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path), UTC)
-
-        # TODO: Expect n files
 
         if not ctimes:
             num_errors += 1
