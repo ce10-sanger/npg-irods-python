@@ -43,7 +43,6 @@ def add_appinfo_structlog_processor():
     structlog.configure(**c)
 
 
-# If this proves generally useful, it could be moved to npg-python-lib
 def parse_timedelta_from_hours(hours: str) -> timedelta:
     """Custom argparse type for hours."""
 

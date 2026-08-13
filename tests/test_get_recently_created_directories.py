@@ -23,11 +23,18 @@ from pathlib import Path
 from typing import AnyStr
 
 from unittest.mock import patch, Mock
-import pytest
+
 from pytest import LogCaptureFixture, CaptureFixture
 from pytest import mark as m
 
 from npg_irods.cli import get_recently_created_directories
+
+FIRST_MONDAY_3AM = datetime(2024, 1, 1, 3, 0, 0, tzinfo=UTC)
+FIRST_SUNDAY_3AM = datetime(2024, 1, 7, 3, 0, 0, tzinfo=UTC)
+SECOND_MONDAY_3AM = datetime(2024, 1, 8, 3, 0, 0, tzinfo=UTC)
+SECOND_SUNDAY_2AM = datetime(2024, 1, 14, 2, 0, 0, tzinfo=UTC)
+SECOND_SUNDAY_2_30AM = datetime(2024, 1, 14, 2, 30, 0, tzinfo=UTC)
+SECOND_SUNDAY_3AM = datetime(2024, 1, 14, 3, 0, 0, tzinfo=UTC)
 
 
 class FakeFilesystem:
@@ -46,12 +53,6 @@ class FakeFilesystem:
         file_ctimes = file_ctimes or []
 
         directory_path = self.root / path
-
-        # if not directory_path.exists():
-        #     self.create_directory(directory_path.parent)
-        #
-        # directory_path.mkdir(parents=False, exist_ok=True)
-
         directory_path.mkdir(parents=False, exist_ok=False)
 
         if ctime:
@@ -66,12 +67,6 @@ class FakeFilesystem:
         self, path: AnyStr | PathLike, ctime: datetime | None = None
     ) -> Path:
         file_path = self.root / path
-
-        # if not file_path.parent.exists():
-        #     self.create_directory(file_path.parent)
-        #
-        # file_path.touch(exist_ok=False)
-
         file_path.touch(exist_ok=False)
 
         if ctime:
@@ -81,21 +76,91 @@ class FakeFilesystem:
 
     def _get_ctime(self, path):
         ctime = self.ctimes.get(path)
-        if not ctime:
-            raise Exception("Test error")
+        assert ctime is not None, f"Expected ctime to have been setup on path {path}"
         return ctime
-
-
-# TODO: Constants/uppercase?
-first_monday_3am = datetime(2024, 1, 1, 3, 0, 0, tzinfo=UTC)
-first_sunday_3am = datetime(2024, 1, 7, 3, 0, 0, tzinfo=UTC)
-second_monday_3am = datetime(2024, 1, 8, 3, 0, 0, tzinfo=UTC)
-second_sunday_2_30am = datetime(2024, 1, 14, 2, 30, 0, tzinfo=UTC)
-second_sunday_3am = datetime(2024, 1, 14, 3, 0, 0, tzinfo=UTC)
 
 
 @m.describe("get-recently-created-directories (script)")
 class TestGetRecentlyCreatedDirectoriesScript:
+
+    @patch(
+        "npg_irods.cli.get_recently_created_directories.get_recently_created_directories",
+        autospec=True,
+    )
+    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
+    def test_main_normal_case_defaults_2(
+        self,
+        mock_get_now_utc: Mock,
+        mock_get_recently_created_directories: Mock,
+        tmp_path: Path,
+        caplog: LogCaptureFixture,
+    ):
+        # Arrange
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
+
+        input_path = tmp_path / "input.txt"
+        input_path.write_text("a\nb")
+
+        mock_get_recently_created_directories.return_value = (2, 2, 1, 0)
+
+        # Act
+        with caplog.at_level("DEBUG"):
+            self._main(["--input", str(input_path)])
+
+        # Assert
+        mock_get_recently_created_directories.assert_called_once()
+        args = mock_get_recently_created_directories.call_args.kwargs
+        assert args["begin"] == FIRST_SUNDAY_3AM
+        assert args["end"] == SECOND_SUNDAY_2AM
+        assert args["max_creation_period"] == timedelta(hours=6)
+
+        assert "Got recently created directories" in caplog.text
+        assert "num_dirs=2" in caplog.text
+        assert "num_filtered=2" in caplog.text
+        assert "num_recent=1" in caplog.text
+        assert "num_errors=0" in caplog.text
+
+    @patch(
+        "npg_irods.cli.get_recently_created_directories.get_recently_created_directories",
+        autospec=True,
+    )
+    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
+    def test_main_normal_case_args2(
+        self,
+        mock_get_now_utc: Mock,
+        mock_get_recently_created_directories: Mock,
+        tmp_path: Path,
+        caplog: LogCaptureFixture,
+    ):
+        # Arrange
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
+
+        input_path = tmp_path / "input.txt"
+        input_path.write_text("a\nb")
+
+        mock_get_recently_created_directories.return_value = (2, 2, 1, 0)
+
+        # Act
+        with caplog.at_level("DEBUG"):
+            self._main(
+                [
+                    "--input",
+                    str(input_path),
+                    "--begin-date",
+                    "2024-01-07T03:00:01Z",
+                    "--end-date",
+                    "2024-01-14T02:00:01Z",
+                    "--max-creation-period",
+                    "7",
+                ]
+            )
+
+        # Assert
+        mock_get_recently_created_directories.assert_called_once()
+        args = mock_get_recently_created_directories.call_args.kwargs
+        assert args["begin"] == FIRST_SUNDAY_3AM + timedelta(seconds=1)
+        assert args["end"] == SECOND_SUNDAY_2AM + timedelta(seconds=1)
+        assert args["max_creation_period"] == timedelta(hours=7)
 
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
@@ -110,17 +175,17 @@ class TestGetRecentlyCreatedDirectoriesScript:
         # Arrange
         fs = FakeFilesystem(tmp_path, mock_get_ctime)
 
-        mock_get_now_utc.return_value = second_sunday_3am
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
 
         # Directory case 1: Created recently
         recent = tmp_path / "recent"
         fs.create_directory(recent)
-        fs.create_file(recent / "recent.txt", ctime=second_monday_3am)
+        fs.create_file(recent / "recent.txt", ctime=SECOND_MONDAY_3AM)
 
         # Directory case 2: Not created recently
         not_recent = tmp_path / "not_recent"
         fs.create_directory(not_recent)
-        fs.create_file(not_recent / "not_recent.txt", ctime=first_monday_3am)
+        fs.create_file(not_recent / "not_recent.txt", ctime=FIRST_MONDAY_3AM)
 
         directories = [recent, not_recent]
 
@@ -161,17 +226,17 @@ class TestGetRecentlyCreatedDirectoriesScript:
         # Arrange
         fs = FakeFilesystem(tmp_path, mock_get_ctime)
 
-        mock_get_now_utc.return_value = second_sunday_3am
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
 
         # Directory case 1: Created recently
         recent = tmp_path / "recent"
         fs.create_directory(recent)
-        fs.create_file(recent / "recent.txt", ctime=second_monday_3am)
+        fs.create_file(recent / "recent.txt", ctime=SECOND_MONDAY_3AM)
 
         # Directory case 2: Not created recently
         not_recent = tmp_path / "not_recent"
         fs.create_directory(not_recent)
-        fs.create_file(not_recent / "not_recent.txt", ctime=first_monday_3am)
+        fs.create_file(not_recent / "not_recent.txt", ctime=FIRST_MONDAY_3AM)
 
         directories = [recent, not_recent]
 
@@ -256,7 +321,7 @@ class TestGetRecentlyCreatedDirectories:
 
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
-    def test_too_new(  # TODO: being created?
+    def test_normal(
         self,
         mock_get_now_utc: Mock,
         mock_get_ctime: Mock,
@@ -265,17 +330,52 @@ class TestGetRecentlyCreatedDirectories:
     ):
         # Arrange
         fs = FakeFilesystem(tmp_path, mock_get_ctime)
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
 
-        mock_get_now_utc.return_value = second_sunday_3am
+        recent = fs.create_directory("recent", file_ctimes=[SECOND_MONDAY_3AM])
+        not_recent = fs.create_directory("not_recent", file_ctimes=[FIRST_MONDAY_3AM])
+        directories = [str(recent), str(not_recent)]
 
-        recent = tmp_path / "recent"
-        fs.create_directory(recent)
-        fs.create_file(recent / "recent.txt", ctime=second_monday_3am)
+        # Act
+        with caplog.at_level("DEBUG"):
+            with StringIO("\n".join(directories)) as reader:
+                with StringIO() as writer:
+                    num_dirs, num_filtered, num_recent, num_errors = (
+                        get_recently_created_directories.get_recently_created_directories(
+                            reader,
+                            writer,
+                            begin=FIRST_SUNDAY_3AM,
+                            end=SECOND_SUNDAY_3AM - timedelta(hours=1),
+                            max_creation_period=timedelta(hours=6),
+                        )
+                    )
+                    recent_paths = writer.getvalue().split()
 
-        being_created = tmp_path / "being_created"
-        fs.create_directory(being_created)
-        fs.create_file(being_created / "being_created.txt", ctime=second_sunday_2_30am)
+        # Assert
+        assert recent_paths == [str(recent)]
 
+        assert num_dirs == 2
+        assert num_filtered == 2
+        assert num_recent == 1
+        assert num_errors == 0
+
+    @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
+    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
+    def test_being_created(
+        self,
+        mock_get_now_utc: Mock,
+        mock_get_ctime: Mock,
+        tmp_path: Path,
+        caplog: LogCaptureFixture,
+    ):
+        # Arrange
+        fs = FakeFilesystem(tmp_path, mock_get_ctime)
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
+
+        recent = fs.create_directory("recent", file_ctimes=[SECOND_MONDAY_3AM])
+        being_created = fs.create_directory(
+            "being_created", file_ctimes=[SECOND_SUNDAY_2_30AM]
+        )
         directories = [str(recent), str(being_created)]
 
         # Act
@@ -286,8 +386,8 @@ class TestGetRecentlyCreatedDirectories:
                         get_recently_created_directories.get_recently_created_directories(
                             reader,
                             writer,
-                            begin=first_sunday_3am,
-                            end=second_sunday_3am - timedelta(hours=1),
+                            begin=FIRST_SUNDAY_3AM,
+                            end=SECOND_SUNDAY_3AM - timedelta(hours=1),
                             max_creation_period=timedelta(hours=6),
                         )
                     )
@@ -315,13 +415,11 @@ class TestGetRecentlyCreatedDirectories:
         # Arrange
         fs = FakeFilesystem(tmp_path, mock_get_ctime)
 
-        mock_get_now_utc.return_value = second_sunday_3am
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
 
-        recent = fs.create_directory(
-            tmp_path / "recent", file_ctimes=[second_monday_3am]
-        )
+        recent = fs.create_directory("recent", file_ctimes=[SECOND_MONDAY_3AM])
         later_change = fs.create_directory(
-            tmp_path / "later_change", file_ctimes=[first_monday_3am, second_monday_3am]
+            "later_change", file_ctimes=[FIRST_MONDAY_3AM, SECOND_MONDAY_3AM]
         )
         directories = [str(recent), str(later_change)]
 
@@ -333,8 +431,8 @@ class TestGetRecentlyCreatedDirectories:
                         get_recently_created_directories.get_recently_created_directories(
                             reader,
                             writer,
-                            begin=first_sunday_3am,
-                            end=second_sunday_3am - timedelta(hours=1),
+                            begin=FIRST_SUNDAY_3AM,
+                            end=SECOND_SUNDAY_3AM - timedelta(hours=1),
                             max_creation_period=timedelta(hours=6),
                         )
                     )
@@ -349,3 +447,44 @@ class TestGetRecentlyCreatedDirectories:
         assert num_errors == 1
 
         assert "Unexpected later change to file" in caplog.text
+
+    @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
+    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
+    def test_empty(
+        self,
+        mock_get_now_utc: Mock,
+        mock_get_ctime: Mock,
+        tmp_path: Path,
+        caplog: LogCaptureFixture,
+    ):
+        # Arrange
+        fs = FakeFilesystem(tmp_path, mock_get_ctime)
+
+        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
+
+        recent = fs.create_directory("recent", file_ctimes=[SECOND_MONDAY_3AM])
+        empty = fs.create_directory("empty")
+        directories = [str(recent), str(empty)]
+
+        # Act
+        with caplog.at_level("DEBUG"):
+            with StringIO("\n".join(directories)) as reader:
+                with StringIO() as writer:
+                    num_dirs, num_filtered, num_recent, num_errors = (
+                        get_recently_created_directories.get_recently_created_directories(
+                            reader,
+                            writer,
+                            begin=FIRST_SUNDAY_3AM,
+                            end=SECOND_SUNDAY_3AM - timedelta(hours=1),
+                            max_creation_period=timedelta(hours=6),
+                        )
+                    )
+                    recent_paths = writer.getvalue().split()
+
+        # Assert
+        assert recent_paths == [str(recent)]
+
+        assert num_dirs == 2
+        assert num_filtered == 1
+        assert num_recent == 1
+        assert num_errors == 1

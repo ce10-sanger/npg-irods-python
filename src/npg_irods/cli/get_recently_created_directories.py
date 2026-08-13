@@ -254,7 +254,11 @@ def main():
         with open_output(output_path, encoding="utf-8") as writer:
             num_dirs, num_filtered, num_recent, num_errors = (
                 get_recently_created_directories(
-                    reader, writer, begin, end, max_creation_period
+                    reader,
+                    writer,
+                    begin=begin,
+                    end=end,
+                    max_creation_period=max_creation_period,
                 )
             )
 
