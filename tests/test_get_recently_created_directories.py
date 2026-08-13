@@ -37,7 +37,14 @@ class FakeFilesystem:
         mock_get_ctime.side_effect = lambda path: self._get_ctime(path)
         self.ctimes = {}
 
-    def create_directory(self, path: AnyStr | PathLike, ctime: datetime | None = None):
+    def create_directory(
+        self,
+        path: AnyStr | PathLike,
+        ctime: datetime | None = None,
+        file_ctimes: list[datetime] = None,
+    ) -> Path:
+        file_ctimes = file_ctimes or []
+
         directory_path = self.root / path
 
         # if not directory_path.exists():
@@ -50,7 +57,14 @@ class FakeFilesystem:
         if ctime:
             self.ctimes[directory_path] = ctime.timestamp()
 
-    def create_file(self, path: AnyStr | PathLike, ctime: datetime | None = None):
+        for i, file_ctime in enumerate(file_ctimes):
+            self.create_file(directory_path / f"{i}.txt", ctime=file_ctime)
+
+        return directory_path
+
+    def create_file(
+        self, path: AnyStr | PathLike, ctime: datetime | None = None
+    ) -> Path:
         file_path = self.root / path
 
         # if not file_path.parent.exists():
@@ -62,6 +76,8 @@ class FakeFilesystem:
 
         if ctime:
             self.ctimes[file_path] = ctime.timestamp()
+
+        return file_path
 
     def _get_ctime(self, path):
         ctime = self.ctimes.get(path)
@@ -240,7 +256,7 @@ class TestGetRecentlyCreatedDirectories:
 
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
-    def test_too_new(
+    def test_too_new(  # TODO: being created?
         self,
         mock_get_now_utc: Mock,
         mock_get_ctime: Mock,
@@ -285,4 +301,51 @@ class TestGetRecentlyCreatedDirectories:
         assert num_recent == 1
         assert num_errors == 0
 
-        assert "Too new" in caplog.text # TODO: Fix
+        assert "too new" in caplog.text
+
+    @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
+    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
+    def test_later_change(
+        self,
+        mock_get_now_utc: Mock,
+        mock_get_ctime: Mock,
+        tmp_path: Path,
+        caplog: LogCaptureFixture,
+    ):
+        # Arrange
+        fs = FakeFilesystem(tmp_path, mock_get_ctime)
+
+        mock_get_now_utc.return_value = second_sunday_3am
+
+        recent = fs.create_directory(
+            tmp_path / "recent", file_ctimes=[second_monday_3am]
+        )
+        later_change = fs.create_directory(
+            tmp_path / "later_change", file_ctimes=[first_monday_3am, second_monday_3am]
+        )
+        directories = [str(recent), str(later_change)]
+
+        # Act
+        with caplog.at_level("DEBUG"):
+            with StringIO("\n".join(directories)) as reader:
+                with StringIO() as writer:
+                    num_dirs, num_filtered, num_recent, num_errors = (
+                        get_recently_created_directories.get_recently_created_directories(
+                            reader,
+                            writer,
+                            begin=first_sunday_3am,
+                            end=second_sunday_3am - timedelta(hours=1),
+                            max_creation_period=timedelta(hours=6),
+                        )
+                    )
+                    recent_paths = writer.getvalue().split()
+
+        # Assert
+        assert recent_paths == [str(recent)]
+
+        assert num_dirs == 2
+        assert num_filtered == 1
+        assert num_recent == 1
+        assert num_errors == 1
+
+        assert "Unexpected later change to file" in caplog.text
