@@ -490,15 +490,17 @@ class TestGetRecentlyCreatedDirectories:
         assert num_recent == 1
         assert num_errors == 1
 
-    @m.it("Should excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files")
+    @m.it(
+        "Should excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files"
+    )
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
     def test_ignore(
-            self,
-            mock_get_now_utc: Mock,
-            mock_get_ctime: Mock,
-            tmp_path: Path,
-            caplog: LogCaptureFixture,
+        self,
+        mock_get_now_utc: Mock,
+        mock_get_ctime: Mock,
+        tmp_path: Path,
+        caplog: LogCaptureFixture,
     ):
         # Arrange
         fs = FakeFilesystem(tmp_path, mock_get_ctime)

@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # @author Calum Eadie <ce10@sanger.ac.uk>
+import sys
 from datetime import datetime, timedelta, UTC
 
 import operator
@@ -41,7 +42,6 @@ from npg_irods import (
 )
 from npg_irods.utilities import sanitise_path
 
-
 description = """
 Filters a list of directories to those recently created.
 
@@ -65,7 +65,7 @@ and exclude from automatic publishing.
 
 epilog = """
 notes:
-  Error Handling: TODO
+  Error Handling: Continues to next directory on error.
   Symbolic Links: Follows file links. Does not follow directory links (to avoid filesystem loops).
   Exclusions: Excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files
   
@@ -89,89 +89,94 @@ def get_recently_created_directories(
     num_dirs, num_filtered, num_recent, num_errors = 0, 0, 0, 0
 
     for line in reader:
-        directory_path = Path(sanitise_path(line))
+        try:
+            num_dirs += 1
+            directory_path = Path(sanitise_path(line))
 
-        num_dirs += 1
+            ctimes: dict[Path, datetime] = {}
 
-        ctimes: dict[Path, datetime] = {}
+            for file_path in directory_path.rglob("*"):
+                if not file_path.is_file():
+                    continue
 
-        for file_path in directory_path.rglob("*"):
-            if not file_path.is_file():
+                # TODO: Test
+                # TODO: exclude_patterns?
+                # TODO: Share common
+                if file_path.suffix.lower() == ".md5" or file_path.name == ".DS_Store":
+                    continue
+
+                ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path), UTC)
+
+            if not ctimes:
+                num_errors += 1
+                logger().warning(
+                    "No matching files.",
+                    directory=directory_path,
+                )
                 continue
 
-            # TODO: Test
-            # TODO: exclude_patterns?
-            # TODO: Share common
-            if file_path.suffix.lower() == ".md5" or file_path.name == ".DS_Store":
-                continue
-
-            ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path), UTC)
-
-        if not ctimes:
-            num_errors += 1
-            logger().warning(
-                "No matching files.",
-                directory=directory_path,
+            earliest_ctime_path, earliest_ctime_date = min(
+                ctimes.items(), key=operator.itemgetter(1)
             )
-            continue
+            latest_ctime_path, latest_ctime_date = max(
+                ctimes.items(), key=operator.itemgetter(1)
+            )
 
-        earliest_ctime_path, earliest_ctime_date = min(
-            ctimes.items(), key=operator.itemgetter(1)
-        )
-        latest_ctime_path, latest_ctime_date = max(
-            ctimes.items(), key=operator.itemgetter(1)
-        )
+            too_old = latest_ctime_date < begin
+            if too_old:
+                num_filtered += 1
+                logger().debug(
+                    "Filtered out: too old. Latest ctime before beginning of recent creation window.",
+                    directory=directory_path,
+                    begin=begin,
+                    latest_ctime_path=latest_ctime_path,
+                    latest_ctime_date=latest_ctime_date,
+                )
+                continue
 
-        too_old = latest_ctime_date < begin
-        if too_old:
+            too_new = latest_ctime_date > end
+            if too_new:
+                num_filtered += 1
+                logger().info(
+                    "Filtered out: too new (avoid in progress). Latest ctime after end of recent creation window.",
+                    directory=directory_path,
+                    begin=begin,
+                    latest_ctime_path=latest_ctime_path,
+                    latest_ctime_date=latest_ctime_date,
+                )
+                continue
+
+            creation_period = latest_ctime_date - earliest_ctime_date
+            if creation_period > max_creation_period:
+                logger().warning(
+                    "Unexpected later change to file",
+                    directory=directory_path,
+                    creation_period=creation_period,
+                    earliest_ctime_path=earliest_ctime_path,
+                    earliest_ctime_date=earliest_ctime_date,
+                    latest_ctime_path=latest_ctime_path,
+                    latest_ctime_date=latest_ctime_date,
+                )
+                num_errors += 1
+                continue
+
             num_filtered += 1
+            num_recent += 1
+            print(directory_path, file=writer)
             logger().debug(
-                "Filtered out: too old. Latest ctime before beginning of recent creation window.",
+                "Filtered in.",
                 directory=directory_path,
                 begin=begin,
-                latest_ctime_path=latest_ctime_path,
-                latest_ctime_date=latest_ctime_date,
-            )
-            continue
-
-        too_new = latest_ctime_date > end
-        if too_new:
-            num_filtered += 1
-            logger().info(
-                "Filtered out: too new (avoid in progress). Latest ctime after end of recent creation window.",
-                directory=directory_path,
-                begin=begin,
-                latest_ctime_path=latest_ctime_path,
-                latest_ctime_date=latest_ctime_date,
-            )
-            continue
-
-        creation_period = latest_ctime_date - earliest_ctime_date
-        if creation_period > max_creation_period:
-            logger().warning(
-                "Unexpected later change to file",
-                directory=directory_path,
+                end=end,
                 creation_period=creation_period,
-                earliest_ctime_path=earliest_ctime_path,
-                earliest_ctime_date=earliest_ctime_date,
                 latest_ctime_path=latest_ctime_path,
                 latest_ctime_date=latest_ctime_date,
             )
+        except Exception as e:
             num_errors += 1
+            logger().exception("Could not filter directory", line=line, error=e)
             continue
 
-        num_filtered += 1
-        num_recent += 1
-        print(directory_path, file=writer)
-        logger().debug(
-            "Filtered in.",
-            directory=directory_path,
-            begin=begin,
-            end=end,
-            creation_period=creation_period,
-            latest_ctime_path=latest_ctime_path,
-            latest_ctime_date=latest_ctime_date,
-        )
     return num_dirs, num_filtered, num_recent, num_errors
 
 
@@ -254,6 +259,16 @@ def main():
                 )
             )
 
+    if num_errors:
+        logger().error(
+            "Some errors whilst getting recently created directories",
+            num_dirs=num_dirs,
+            num_filtered=num_filtered,
+            num_recent=num_recent,
+            num_errors=num_errors,
+        )
+        sys.exit(1)
+
     logger().info(
         "Got recently created directories",
         num_dirs=num_dirs,
@@ -261,7 +276,6 @@ def main():
         num_recent=num_recent,
         num_errors=num_errors,
     )
-    # TODO: Error handling
 
 
 if __name__ == "__main__":
