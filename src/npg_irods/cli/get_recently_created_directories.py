@@ -19,6 +19,7 @@
 from datetime import datetime, timedelta, timezone, UTC
 
 import operator
+from typing import BinaryIO, TextIO, Any
 
 from npg_irods.system_calls import get_now_utc, get_ctime
 
@@ -81,6 +82,105 @@ history:
 
 def logger():
     return structlog.get_logger(__name__)
+
+
+def get_recently_created_directories(
+    reader: BinaryIO | TextIO | Any,
+    writer: BinaryIO | TextIO | Any,
+    begin: datetime,
+    end: datetime,
+    max_creation_period: timedelta,
+) -> tuple[int, int, int, int]:
+    num_dirs, num_filtered, num_recent, num_errors = 0, 0, 0, 0
+
+    for line in reader:
+        directory_path = Path(sanitise_path(line))
+
+        num_dirs += 1
+
+        ctimes: dict[Path, datetime] = {}
+
+        for file_path in directory_path.rglob("*"):
+            if not file_path.is_file():
+                continue
+
+            # TODO: exclude_patterns?
+            # TODO: Share common
+            if file_path.suffix.lower() == ".md5" or file_path.name == ".DS_Store":
+                continue
+
+            # TODO: TypeError: can't compare offset-naive and offset-aware datetimes
+            # TODO: How do timezones come into this?
+            ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path), UTC)
+
+        # TODO: Expect n files
+
+        if not ctimes:
+            num_errors += 1
+            logger().warning(
+                "No matching files.",
+                directory=directory_path,
+            )
+            continue
+
+        earliest_ctime_path, earliest_ctime_date = min(
+            ctimes.items(), key=operator.itemgetter(1)
+        )
+        latest_ctime_path, latest_ctime_date = max(
+            ctimes.items(), key=operator.itemgetter(1)
+        )
+
+        too_old = latest_ctime_date < begin
+        if too_old:
+            num_filtered += 1
+            logger().debug(
+                "Filtered out: too old. Latest ctime before beginning of recent creation window.",
+                directory=directory_path,
+                begin=begin,
+                latest_ctime_path=latest_ctime_path,
+                latest_ctime_date=latest_ctime_date,
+            )
+            continue
+
+        too_new = latest_ctime_date > end
+        if too_new:
+            num_filtered += 1
+            logger().info(
+                "Filtered out: too new (avoid in progress). Latest ctime after end of recent creation window.",
+                directory=directory_path,
+                begin=begin,
+                latest_ctime_path=latest_ctime_path,
+                latest_ctime_date=latest_ctime_date,
+            )
+            continue
+
+        creation_period = latest_ctime_date - earliest_ctime_date
+        if creation_period > max_creation_period:
+            logger().warning(
+                "Unexpected later change to file",
+                directory=directory_path,
+                creation_period=creation_period,
+                earliest_ctime_path=earliest_ctime_path,
+                earliest_ctime_date=earliest_ctime_date,
+                latest_ctime_path=latest_ctime_path,
+                latest_ctime_date=latest_ctime_date,
+            )
+            num_errors += 1
+            continue
+
+        num_filtered += 1
+        num_recent += 1
+        print(directory_path, file=writer)
+        logger().debug(
+            "Filtered in.",
+            directory=directory_path,
+            begin=begin,
+            end=end,
+            creation_period=creation_period,
+            latest_ctime_path=latest_ctime_path,
+            latest_ctime_date=latest_ctime_date,
+        )
+    return num_dirs, num_filtered, num_recent, num_errors
 
 
 def main():
@@ -152,100 +252,11 @@ def main():
 
     with open_input(input_path, encoding="utf-8") as reader:
         with open_output(output_path, encoding="utf-8") as writer:
-            num_dirs, num_filtered, num_recent, num_errors = 0, 0, 0, 0
-
-            for line in reader:
-                directory_path = Path(sanitise_path(line))
-
-                num_dirs += 1
-
-                ctimes: dict[Path, datetime] = {}
-
-                for file_path in directory_path.rglob("*"):
-                    if not file_path.is_file():
-                        continue
-
-                    # TODO: exclude_patterns?
-                    # TODO: Share common
-                    if (
-                        file_path.suffix.lower() == ".md5"
-                        or file_path.name == ".DS_Store"
-                    ):
-                        continue
-
-                    # TODO: TypeError: can't compare offset-naive and offset-aware datetimes
-                    # TODO: How do timezones come into this?
-                    ctimes[file_path] = datetime.fromtimestamp(
-                        get_ctime(file_path), UTC
-                    )
-
-                # TODO: Expect n files
-
-                if not ctimes:
-                    num_errors += 1
-                    logger().warning(
-                        "No matching files.",
-                        directory=directory_path,
-                    )
-                    continue
-
-                earliest_ctime_path, earliest_ctime_date = min(
-                    ctimes.items(), key=operator.itemgetter(1)
+            num_dirs, num_filtered, num_recent, num_errors = (
+                get_recently_created_directories(
+                    reader, writer, begin, end, max_creation_period
                 )
-                latest_ctime_path, latest_ctime_date = max(
-                    ctimes.items(), key=operator.itemgetter(1)
-                )
-
-                too_old = latest_ctime_date < begin
-                if too_old:
-                    num_filtered += 1
-                    logger().debug(
-                        "Filtered out: too old. Latest ctime before beginning of recent creation window.",
-                        directory=directory_path,
-                        begin=begin,
-                        latest_ctime_path=latest_ctime_path,
-                        latest_ctime_date=latest_ctime_date,
-                    )
-                    continue
-
-                too_new = latest_ctime_date > end
-                if too_new:
-                    num_filtered += 1
-                    logger().info(
-                        "Filtered out: too new (avoid in progress). Latest ctime after end of recent creation window.",
-                        directory=directory_path,
-                        begin=begin,
-                        latest_ctime_path=latest_ctime_path,
-                        latest_ctime_date=latest_ctime_date,
-                    )
-                    continue
-
-                creation_period = latest_ctime_date - earliest_ctime_date
-                if creation_period > max_creation_period:
-                    logger().warning(
-                        "Unexpected later change to file",
-                        directory=directory_path,
-                        creation_period=creation_period,
-                        earliest_ctime_path=earliest_ctime_path,
-                        earliest_ctime_date=earliest_ctime_date,
-                        latest_ctime_path=latest_ctime_path,
-                        latest_ctime_date=latest_ctime_date,
-                    )
-                    num_errors += 1
-                    continue
-
-                num_filtered += 1
-                num_recent += 1
-                print(directory_path, file=writer)
-                logger().debug(
-                    "Filtered in.",
-                    directory=directory_path,
-                    begin=begin,
-                    end=end,
-                    creation_period=creation_period,
-                    latest_ctime_path=latest_ctime_path,
-                    latest_ctime_date=latest_ctime_date,
-                )
+            )
 
     logger().info(
         "Got recently created directories",

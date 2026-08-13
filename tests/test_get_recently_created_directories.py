@@ -15,7 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
+from io import StringIO
 from os import PathLike
 
 from pathlib import Path
@@ -71,10 +72,13 @@ class FakeFilesystem:
 
 # TODO: Constants/uppercase?
 first_monday_3am = datetime(2024, 1, 1, 3, 0, 0, tzinfo=UTC)
+first_sunday_3am = datetime(2024, 1, 7, 3, 0, 0, tzinfo=UTC)
 second_monday_3am = datetime(2024, 1, 8, 3, 0, 0, tzinfo=UTC)
+second_sunday_2_30am = datetime(2024, 1, 14, 2, 30, 0, tzinfo=UTC)
 second_sunday_3am = datetime(2024, 1, 14, 3, 0, 0, tzinfo=UTC)
 
 
+@m.describe("get-recently-created-directories (script)")
 class TestGetRecentlyCreatedDirectoriesScript:
 
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
@@ -110,6 +114,58 @@ class TestGetRecentlyCreatedDirectoriesScript:
         # Act
         with caplog.at_level("DEBUG"):
             self._main(["--input", str(input_path)])
+
+        # Assert
+        stdout_lines = [line for line in capsys.readouterr().out.split("\n") if line]
+        expected = [
+            str(recent),
+        ]
+        assert stdout_lines == expected
+
+        assert "Got recently created directories" in caplog.text
+        assert "num_dirs=2" in caplog.text
+        assert "num_filtered=2" in caplog.text
+        assert "num_recent=1" in caplog.text
+        assert "num_errors=0" in caplog.text
+
+    # TODO: How to test arg handling? Maybe too heavy for integration test?
+    # TODO: Maybe move to pattern from elsewhere and do pure python tests? Perhaps
+    # with one smoke test of the script.
+
+    @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
+    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
+    def test_main_normal_case_args(
+        self,
+        mock_get_now_utc: Mock,
+        mock_get_ctime: Mock,
+        tmp_path: Path,
+        caplog: LogCaptureFixture,
+        capsys: CaptureFixture,
+    ):
+        # Arrange
+        fs = FakeFilesystem(tmp_path, mock_get_ctime)
+
+        mock_get_now_utc.return_value = second_sunday_3am
+
+        # Directory case 1: Created recently
+        recent = tmp_path / "recent"
+        fs.create_directory(recent)
+        fs.create_file(recent / "recent.txt", ctime=second_monday_3am)
+
+        # Directory case 2: Not created recently
+        not_recent = tmp_path / "not_recent"
+        fs.create_directory(not_recent)
+        fs.create_file(not_recent / "not_recent.txt", ctime=first_monday_3am)
+
+        directories = [recent, not_recent]
+
+        # TODO: with StringIO("\n".join([obj_path])) as reader:
+        input_path = tmp_path / "input.txt"
+        input_path.write_text("\n".join(str(x) for x in directories))
+
+        # Act
+        with caplog.at_level("DEBUG"):
+            self._main(["--input", str(input_path), "--begin-date", "2024-01-08-03"])
 
         # Assert
         stdout_lines = [line for line in capsys.readouterr().out.split("\n") if line]
@@ -177,3 +233,56 @@ class TestGetRecentlyCreatedDirectoriesScript:
     def _main(args: list[str]):
         with patch("sys.argv", ["get-recently-created-directories"] + args):
             get_recently_created_directories.main()
+
+
+@m.describe("get_recently_created_directories (function)")
+class TestGetRecentlyCreatedDirectories:
+
+    @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
+    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
+    def test_too_new(
+        self,
+        mock_get_now_utc: Mock,
+        mock_get_ctime: Mock,
+        tmp_path: Path,
+        caplog: LogCaptureFixture,
+    ):
+        # Arrange
+        fs = FakeFilesystem(tmp_path, mock_get_ctime)
+
+        mock_get_now_utc.return_value = second_sunday_3am
+
+        recent = tmp_path / "recent"
+        fs.create_directory(recent)
+        fs.create_file(recent / "recent.txt", ctime=second_monday_3am)
+
+        being_created = tmp_path / "being_created"
+        fs.create_directory(being_created)
+        fs.create_file(being_created / "being_created.txt", ctime=second_sunday_2_30am)
+
+        directories = [str(recent), str(being_created)]
+
+        # Act
+        with caplog.at_level("DEBUG"):
+            with StringIO("\n".join(directories)) as reader:
+                with StringIO() as writer:
+                    num_dirs, num_filtered, num_recent, num_errors = (
+                        get_recently_created_directories.get_recently_created_directories(
+                            reader,
+                            writer,
+                            begin=first_sunday_3am,
+                            end=second_sunday_3am - timedelta(hours=1),
+                            max_creation_period=timedelta(hours=6),
+                        )
+                    )
+                    recent_paths = writer.getvalue().split()
+
+        # Assert
+        assert recent_paths == [str(recent)]
+
+        assert num_dirs == 2
+        assert num_filtered == 2
+        assert num_recent == 1
+        assert num_errors == 0
+
+        assert "Too new" in caplog.text # TODO: Fix
