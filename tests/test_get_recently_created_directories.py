@@ -450,6 +450,8 @@ class TestGetRecentlyCreatedDirectories:
 
         assert "Unexpected later change to file" in caplog.text
 
+    @m.context("When a directory is empty")
+    @m.it("Should not include and should log a warning")
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
     def test_empty(
@@ -490,6 +492,8 @@ class TestGetRecentlyCreatedDirectories:
         assert num_filtered == 1
         assert num_recent == 1
         assert num_errors == 1
+
+        assert "Unexpected empty directory" in caplog.text
 
     @m.it(
         "Should excludes checksums (.md5) and macOS Finder metadata (.DS_Store) files"

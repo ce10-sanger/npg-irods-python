@@ -115,7 +115,7 @@ def get_recently_created_directories(
             if not ctimes:
                 num_errors += 1
                 logger().warning(
-                    "No matching files.",
+                    "Unexpected empty directory.",
                     directory=directory_path,
                 )
                 continue
