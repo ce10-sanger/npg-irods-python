@@ -105,10 +105,11 @@ def get_recently_created_directories(
                     continue
 
                 # Python is moving towards depreciating ctime and making birthtime available.
-                # Reading NFS drive with ctime = creation time configuration from Python
-                # running on Linux is a corner case. st_ctime depreciated on windows
-                # in favour of st_birthtime. st_ctime documented as time of most recent
-                # metadata change but different in this corner case.
+                # Reading from an NFS drive that's configured so ctime is creation time
+                # from Python running on Linux is a corner case.
+                # st_ctime depreciated on windows in favour of st_birthtime.
+                # st_ctime documented as time of most recent metadata change but
+                # different in this corner case.
                 # See https://docs.python.org/3/library/os.html#os.stat_result.st_ctime.
                 ctimes[file_path] = datetime.fromtimestamp(get_ctime(file_path), UTC)
 
