@@ -81,16 +81,22 @@ class FakeFilesystem:
         return ctime
 
 
-# TODO: @m
 @m.describe("get-recently-created-directories (script)")
 class TestGetRecentlyCreatedDirectoriesScript:
 
+    @m.context("When called with default arguments")
+    @m.it(
+        "Recent creation period should default to the previous 7 days excluding last 1 hour"
+    )
+    @m.it(
+        "Max creation period should default to 6 hours from earliest to latest creation"
+    )
     @patch(
         "npg_irods.cli.get_recently_created_directories.get_recently_created_directories",
         autospec=True,
     )
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
-    def test_main_normal_case_defaults_2(
+    def test_main_normal_case_defaults(
         self,
         mock_get_now_utc: Mock,
         mock_get_recently_created_directories: Mock,
@@ -122,12 +128,14 @@ class TestGetRecentlyCreatedDirectoriesScript:
         assert "num_recent=1" in caplog.text
         assert "num_errors=0" in caplog.text
 
+    @m.it("--{begin,end}-date should accept ISO8601 UTC dates times")
+    @m.it("and --max-creation-period should accept period in hours")
     @patch(
         "npg_irods.cli.get_recently_created_directories.get_recently_created_directories",
         autospec=True,
     )
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
-    def test_main_normal_case_args2(
+    def test_main_normal_case_args(
         self,
         mock_get_now_utc: Mock,
         mock_get_recently_created_directories: Mock,
@@ -162,155 +170,7 @@ class TestGetRecentlyCreatedDirectoriesScript:
         args = mock_get_recently_created_directories.call_args.kwargs
         assert args["begin"] == FIRST_SUNDAY_3AM + timedelta(seconds=1)
         assert args["end"] == SECOND_SUNDAY_2AM + timedelta(seconds=1)
-        assert args["max_creation_period"] == timedelta(hours=7)
-
-    @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
-    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
-    def test_main_normal_case_defaults(
-        self,
-        mock_get_now_utc: Mock,
-        mock_get_ctime: Mock,
-        tmp_path: Path,
-        caplog: LogCaptureFixture,
-        capsys: CaptureFixture,
-    ):
-        # Arrange
-        fs = FakeFilesystem(tmp_path, mock_get_ctime)
-
-        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
-
-        # Directory case 1: Created recently
-        recent = tmp_path / "recent"
-        fs.create_directory(recent)
-        fs.create_file(recent / "recent.txt", ctime=SECOND_MONDAY_3AM)
-
-        # Directory case 2: Not created recently
-        not_recent = tmp_path / "not_recent"
-        fs.create_directory(not_recent)
-        fs.create_file(not_recent / "not_recent.txt", ctime=FIRST_MONDAY_3AM)
-
-        directories = [recent, not_recent]
-
-        input_path = tmp_path / "input.txt"
-        input_path.write_text("\n".join(str(x) for x in directories))
-
-        # Act
-        with caplog.at_level("DEBUG"):
-            self._main(["--input", str(input_path)])
-
-        # Assert
-        stdout_lines = [line for line in capsys.readouterr().out.split("\n") if line]
-        expected = [
-            str(recent),
-        ]
-        assert stdout_lines == expected
-
-        assert "Got recently created directories" in caplog.text
-        assert "num_dirs=2" in caplog.text
-        assert "num_filtered=2" in caplog.text
-        assert "num_recent=1" in caplog.text
-        assert "num_errors=0" in caplog.text
-
-    # TODO: How to test arg handling? Maybe too heavy for integration test?
-    # TODO: Maybe move to pattern from elsewhere and do pure python tests? Perhaps
-    # with one smoke test of the script.
-
-    @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
-    @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
-    def test_main_normal_case_args(
-        self,
-        mock_get_now_utc: Mock,
-        mock_get_ctime: Mock,
-        tmp_path: Path,
-        caplog: LogCaptureFixture,
-        capsys: CaptureFixture,
-    ):
-        # Arrange
-        fs = FakeFilesystem(tmp_path, mock_get_ctime)
-
-        mock_get_now_utc.return_value = SECOND_SUNDAY_3AM
-
-        # Directory case 1: Created recently
-        recent = tmp_path / "recent"
-        fs.create_directory(recent)
-        fs.create_file(recent / "recent.txt", ctime=SECOND_MONDAY_3AM)
-
-        # Directory case 2: Not created recently
-        not_recent = tmp_path / "not_recent"
-        fs.create_directory(not_recent)
-        fs.create_file(not_recent / "not_recent.txt", ctime=FIRST_MONDAY_3AM)
-
-        directories = [recent, not_recent]
-
-        # TODO: with StringIO("\n".join([obj_path])) as reader:
-        input_path = tmp_path / "input.txt"
-        input_path.write_text("\n".join(str(x) for x in directories))
-
-        # Act
-        with caplog.at_level("DEBUG"):
-            self._main(["--input", str(input_path), "--begin-date", "2024-01-08-03"])
-
-        # Assert
-        stdout_lines = [line for line in capsys.readouterr().out.split("\n") if line]
-        expected = [
-            str(recent),
-        ]
-        assert stdout_lines == expected
-
-        assert "Got recently created directories" in caplog.text
-        assert "num_dirs=2" in caplog.text
-        assert "num_filtered=2" in caplog.text
-        assert "num_recent=1" in caplog.text
-        assert "num_errors=0" in caplog.text
-
-    @patch("get_recently_created_directories.system_calls.get_ctime")
-    @patch("get_recently_created_directories.system_calls.get_now_utc")
-    def test_get_recently_created_directories(
-        self, mock_get_now_utc, mock_get_ctime, tmp_path: Path
-    ):
-        # Arrange
-
-        fs = FakeFilesystem(tmp_path, mock_get_ctime)
-
-        first_monday_3am = datetime(2024, 1, 1, 3, 0, 0)
-        second_monday_3am = datetime(2024, 1, 8, 3, 0, 0)
-        second_sunday_3am = datetime(2024, 1, 14, 3, 0, 0)
-
-        mock_get_now_utc.return_value = second_sunday_3am
-
-        ctimes = {}
-
-        # Directory case 1: Created recently
-        recent = tmp_path / "recent"
-        # recent.mkdir()
-        # (recent / "recent.txt").touch()
-        # ctimes[(recent / "recent.txt")] = second_monday_3am.timestamp()
-        fs.create_directory(recent)
-        fs.create_file(recent / "recent.txt", ctime=second_monday_3am)
-
-        # Directory case 2: Not created recently
-        not_recent = tmp_path / "not_recent"
-        not_recent.mkdir()
-        (not_recent / "not_recent.txt").touch()
-        ctimes[(recent / "recent.txt")] = first_monday_3am.timestamp()
-
-        # Directory case 3: Creation currently happening
-
-        # Directory case 4: Change after initial creation
-
-        # Directory case 5: Empty
-        empty = tmp_path / "empty"
-        empty.mkdir()
-
-        directories = [recent, not_recent, empty]
-
-        input_path = tmp_path / "input.txt"
-        input_path.write_text("\n".join(str(x) for x in directories))
-
-        # Act
-        self._main(["--debug", "--input", input_path])
-
-        # Assert
+        assert args["max_creation_period"] == timedelta(hours=6 + 1)
 
     @staticmethod
     def _main(args: list[str]):
