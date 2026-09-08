@@ -321,6 +321,8 @@ class TestGetRecentlyCreatedDirectoriesScript:
 @m.describe("get_recently_created_directories (function)")
 class TestGetRecentlyCreatedDirectories:
 
+    @m.context("When all files in a directory were created recently")
+    @m.it("Should include")
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
     def test_normal(
@@ -361,6 +363,8 @@ class TestGetRecentlyCreatedDirectories:
         assert num_recent == 1
         assert num_errors == 0
 
+    @m.context("When a directory is being created")
+    @m.it("Should not include and should log a warning")
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
     def test_being_created(
@@ -405,6 +409,8 @@ class TestGetRecentlyCreatedDirectories:
 
         assert "too new" in caplog.text
 
+    @m.context("When a directory contains a later change")
+    @m.it("Should not include and should log a warning")
     @patch("npg_irods.cli.get_recently_created_directories.get_ctime")
     @patch("npg_irods.cli.get_recently_created_directories.get_now_utc")
     def test_later_change(
