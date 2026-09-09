@@ -51,8 +51,8 @@ directory paths to a file or STDOUT, one per line.
 Considers all files at any depth below directory.
 
 Compares by ctime. Tool is only applicable to filesystems where
-ctime a creation time (i.e. some NFS filesystems depending on configuration) and
-not last metadata change (i.e. a typical Unix filesystem).   
+ctime is a creation time (i.e. some NFS filesystems depending on configuration) and
+not the last metadata change (i.e. a typical Unix filesystem).   
 
 Directories with "too recent" changes can be excluded. For example, to
 heuristically guard against in progress transfers. 
