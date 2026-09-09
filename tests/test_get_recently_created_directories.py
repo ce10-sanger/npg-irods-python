@@ -109,7 +109,7 @@ class TestGetRecentlyCreatedDirectoriesScript:
         input_path = tmp_path / "input.txt"
         input_path.write_text("a\nb")
 
-        mock_get_recently_created_directories.return_value = (2, 2, 1, 0)
+        mock_get_recently_created_directories.return_value = (2, 1, 0)
 
         # Act
         with caplog.at_level("DEBUG"):
@@ -124,7 +124,6 @@ class TestGetRecentlyCreatedDirectoriesScript:
 
         assert "Got recently created directories" in caplog.text
         assert "num_dirs=2" in caplog.text
-        assert "num_filtered=2" in caplog.text
         assert "num_recent=1" in caplog.text
         assert "num_errors=0" in caplog.text
 
@@ -148,7 +147,7 @@ class TestGetRecentlyCreatedDirectoriesScript:
         input_path = tmp_path / "input.txt"
         input_path.write_text("a\nb")
 
-        mock_get_recently_created_directories.return_value = (2, 2, 1, 0)
+        mock_get_recently_created_directories.return_value = (2, 1, 0)
 
         # Act
         with caplog.at_level("DEBUG"):
@@ -204,7 +203,7 @@ class TestGetRecentlyCreatedDirectories:
         with caplog.at_level("DEBUG"):
             with StringIO("\n".join(directories)) as reader:
                 with StringIO() as writer:
-                    num_dirs, num_filtered, num_recent, num_errors = (
+                    num_dirs, num_recent, num_errors = (
                         get_recently_created_directories.get_recently_created_directories(
                             reader,
                             writer,
@@ -219,7 +218,6 @@ class TestGetRecentlyCreatedDirectories:
         assert recent_paths == [str(recent)]
 
         assert num_dirs == 2
-        assert num_filtered == 2
         assert num_recent == 1
         assert num_errors == 0
 
@@ -248,7 +246,7 @@ class TestGetRecentlyCreatedDirectories:
         with caplog.at_level("DEBUG"):
             with StringIO("\n".join(directories)) as reader:
                 with StringIO() as writer:
-                    num_dirs, num_filtered, num_recent, num_errors = (
+                    num_dirs, num_recent, num_errors = (
                         get_recently_created_directories.get_recently_created_directories(
                             reader,
                             writer,
@@ -263,7 +261,6 @@ class TestGetRecentlyCreatedDirectories:
         assert recent_paths == [str(recent)]
 
         assert num_dirs == 2
-        assert num_filtered == 2
         assert num_recent == 1
         assert num_errors == 0
 
@@ -295,7 +292,7 @@ class TestGetRecentlyCreatedDirectories:
         with caplog.at_level("DEBUG"):
             with StringIO("\n".join(directories)) as reader:
                 with StringIO() as writer:
-                    num_dirs, num_filtered, num_recent, num_errors = (
+                    num_dirs, num_recent, num_errors = (
                         get_recently_created_directories.get_recently_created_directories(
                             reader,
                             writer,
@@ -310,7 +307,6 @@ class TestGetRecentlyCreatedDirectories:
         assert recent_paths == [str(recent)]
 
         assert num_dirs == 2
-        assert num_filtered == 1
         assert num_recent == 1
         assert num_errors == 1
 
@@ -340,7 +336,7 @@ class TestGetRecentlyCreatedDirectories:
         with caplog.at_level("DEBUG"):
             with StringIO("\n".join(directories)) as reader:
                 with StringIO() as writer:
-                    num_dirs, num_filtered, num_recent, num_errors = (
+                    num_dirs, num_recent, num_errors = (
                         get_recently_created_directories.get_recently_created_directories(
                             reader,
                             writer,
@@ -355,7 +351,6 @@ class TestGetRecentlyCreatedDirectories:
         assert recent_paths == [str(recent)]
 
         assert num_dirs == 2
-        assert num_filtered == 1
         assert num_recent == 1
         assert num_errors == 1
 
@@ -388,7 +383,7 @@ class TestGetRecentlyCreatedDirectories:
         with caplog.at_level("DEBUG"):
             with StringIO("\n".join(directories)) as reader:
                 with StringIO() as writer:
-                    num_dirs, num_filtered, num_recent, num_errors = (
+                    num_dirs, num_recent, num_errors = (
                         get_recently_created_directories.get_recently_created_directories(
                             reader,
                             writer,
@@ -403,6 +398,5 @@ class TestGetRecentlyCreatedDirectories:
         assert recent_paths == [str(recent)]
 
         assert num_dirs == 1
-        assert num_filtered == 1
         assert num_recent == 1
         assert num_errors == 0

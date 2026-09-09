@@ -87,8 +87,8 @@ def get_recently_created_directories(
     begin: datetime,
     end: datetime,
     max_creation_period: timedelta,
-) -> tuple[int, int, int, int]:
-    num_dirs, num_filtered, num_recent, num_errors = 0, 0, 0, 0
+) -> tuple[int, int, int]:
+    num_dirs, num_recent, num_errors = 0, 0, 0
 
     for line in reader:
         try:
@@ -130,7 +130,6 @@ def get_recently_created_directories(
 
             too_old = latest_ctime_date < begin
             if too_old:
-                num_filtered += 1
                 logger().debug(
                     "Filtered out: too old. Latest ctime before beginning of recent creation window.",
                     directory=directory_path,
@@ -142,7 +141,6 @@ def get_recently_created_directories(
 
             too_new = latest_ctime_date > end
             if too_new:
-                num_filtered += 1
                 logger().info(
                     "Filtered out: too new (avoid in progress). Latest ctime after end of recent creation window.",
                     directory=directory_path,
@@ -166,7 +164,6 @@ def get_recently_created_directories(
                 num_errors += 1
                 continue
 
-            num_filtered += 1
             num_recent += 1
             print(directory_path, file=writer)
             logger().debug(
@@ -183,7 +180,7 @@ def get_recently_created_directories(
             logger().exception("Could not filter directory", line=line, error=e)
             continue
 
-    return num_dirs, num_filtered, num_recent, num_errors
+    return num_dirs, num_recent, num_errors
 
 
 def main():
@@ -255,21 +252,18 @@ def main():
 
     with open_input(input_path, encoding="utf-8") as reader:
         with open_output(output_path, encoding="utf-8") as writer:
-            num_dirs, num_filtered, num_recent, num_errors = (
-                get_recently_created_directories(
-                    reader,
-                    writer,
-                    begin=begin,
-                    end=end,
-                    max_creation_period=max_creation_period,
-                )
+            num_dirs, num_recent, num_errors = get_recently_created_directories(
+                reader,
+                writer,
+                begin=begin,
+                end=end,
+                max_creation_period=max_creation_period,
             )
 
     if num_errors:
         logger().error(
             "Some errors whilst getting recently created directories",
             num_dirs=num_dirs,
-            num_filtered=num_filtered,
             num_recent=num_recent,
             num_errors=num_errors,
         )
@@ -278,7 +272,6 @@ def main():
     logger().info(
         "Got recently created directories",
         num_dirs=num_dirs,
-        num_filtered=num_filtered,
         num_recent=num_recent,
         num_errors=num_errors,
     )
