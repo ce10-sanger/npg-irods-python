@@ -15,6 +15,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
+from pathlib import Path
+
+from typing import Callable
+
 import argparse
 import sys
 
@@ -23,7 +27,7 @@ from npg.cli import add_io_arguments, add_logging_arguments, open_input, open_ou
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
-from npg_irods.utilities import sanitise_path
+from npg_irods.utilities import sanitise_path, read_md5_file, make_get_checksum
 from npg_irods.xenium import publish_result_dirs
 
 description = """Publishes each Xenium result directory in its input to its own iRODS
@@ -69,6 +73,28 @@ def main():
         help="Print to output those paths that were not successfully processed.",
         action="store_true",
     )
+    checksums_group = parser.add_mutually_exclusive_group(required=False)
+    checksums_group.add_argument(
+        "--use-checksum-files",
+        help="Expect checksum files to be present alongside the data files with "
+        "the same name as the data file but with an additional '.md5' extension"
+        "e.g. 'data.txt' and 'data.txt.md5'. Each checksum file should contain only "
+        "the single MD5 checksum of the corresponding data file. This avoids having "
+        "to calculate the checksums during the publish process. If this option is "
+        "enabled and a checksum file cannot be read, an error will be raised for "
+        "that file. Optional, defaults to false.",
+        action="store_true",
+    )
+    checksums_group.add_argument(
+        "--use-checksums-file",
+        help="Expect checksums to be present in a checksums file at path specified "
+        "following GNU coreutils md5sum format. This avoids having to calculate the "
+        "checksums during the publish process. If this option is enabled and a "
+        "checksum is missing or stale, an error will be raised for that file. "
+        "Optional, defaults to none.",
+        type=str,
+        default=None,
+    )
     parser.add_argument(
         "--version",
         help="Print the version and exit.",
@@ -89,6 +115,22 @@ def main():
     input_path = sanitise_path(args.input)
     output_path = sanitise_path(args.output)
 
+    checksum_fn: Callable[[Path | str], str] | None
+    if args.use_checksum_files:
+        checksum_fn = read_md5_file
+    elif args.use_checksums_file:
+        try:
+            checksum_fn = make_get_checksum(Path(args.use_checksums_file))
+        except Exception as e:
+            logger().error(
+                "Failed to read checksums file",
+                path=args.use_checksums_file,
+                error=str(e),
+            )
+            raise e
+    else:
+        checksum_fn = None
+
     with open_input(input_path, encoding="utf-8") as reader:
         with open_output(output_path, encoding="utf-8") as writer:
 
@@ -98,6 +140,7 @@ def main():
                 remote_root=args.collection,
                 print_success=args.print_success,
                 print_fail=args.print_fail,
+                local_checksum=checksum_fn,
             )
 
             if num_failed:

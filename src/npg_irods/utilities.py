@@ -23,6 +23,8 @@
 """This module contains data management utility functions for working with iRODS data
 objects and collections."""
 
+from typing import Callable
+
 import io
 import itertools
 import os
@@ -1259,6 +1261,47 @@ def read_md5_file(path: Path) -> str:
         return md5
 
 
+class Md5sumsReader:
+
+    def __init__(self, md5sums_path: Path):
+        self._md5sums_path = md5sums_path
+        self._md5sums = {}
+        self._md5sums_modified = md5sums_path.stat().st_mtime
+        # TODO: Resource handling
+        self._md5sums_file = self._md5sums_path.open()
+
+        self._read_new_lines()
+
+    def get_md5sum(self, path: Path | str) -> str:
+        path = Path(path) if isinstance(path, str) else path
+        path = path.resolve()
+        checksum = self._md5sums.get(path)
+        if not checksum:
+            self._read_new_lines()
+        checksum = self._md5sums.get(path)
+        if not checksum:
+            raise ValueError(f"No checksum found for {path}")
+        path_modified = path.stat().st_mtime
+        if path_modified > self._md5sums_modified:
+            raise ValueError(
+                f"Checksum for {path} may be out of date, file modified ({path_modified}) more recently than {self._md5sums_path} ({self._md5sums_modified})"
+            )
+        return checksum
+
+    def _read_new_lines(self):
+        # TODO: Logging
+
+        self._md5sums_modified = self._md5sums_path.stat().st_mtime
+
+        while line := self._md5sums_file.readline():
+            line = line.strip()
+            md5, path = line.split("  ", 1)
+            if len(md5) != 32:
+                raise ValueError(f"MD5 checksum is not 32 characters: '{md5}'")
+            self._md5sums[Path(path)] = md5
+
+
+# TODO: Refactor
 def read_md5sums_file(path: Path) -> dict[Path, str]:
     """
     Reads an MD5 checksums file produced by checksum-directory or another tool
@@ -1312,3 +1355,12 @@ def sanitise_path(path: str | None) -> str | None:
             raise ValueError(f"Invalid character in '{path}' at position {i}: '{char}'")
 
     return path
+
+
+def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
+    md5sums_reader = Md5sumsReader(md5sums_path)
+
+    def get_checksum(path: Path | str) -> str:
+        return md5sums_reader.get_md5sum(path)
+
+    return get_checksum
