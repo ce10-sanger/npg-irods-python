@@ -1,20 +1,41 @@
-#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Copyright © 2026 Genome Research Ltd. All rights reserved.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# @author Calum Eadie <ce10@sanger.ac.uk>
+
 import sys
 from pathlib import Path
 import argparse
+
 import structlog
 from npg.cli import add_logging_arguments, open_output
 from npg.log import configure_structlog
 from npg_irods import add_appinfo_structlog_processor, version
-from npg_irods.metadata.xenium import EXPERIMENT_FILENAME
 from npg_irods.utilities import sanitise_path
+from npg_irods.xenium import get_xenium_output_directories
 
-# TODO: Copyright
-# TODO: Docs
-# TODO: Where should this live?
-# TODO: Expected runtime
+description = """
+Lists Xenium output directories, identified by the presence of an experiment file.
+"""
 
-description = """TODO"""
+epilog = """
+notes:
+  Error Handling: Continues on error.
+"""
 
 
 def logger():
@@ -56,26 +77,28 @@ def main():
     root_path = Path(sanitise_path(args.root))
     output_path = sanitise_path(args.output)
 
-    def on_error(error: OSError):
-        logger().error("Could not scan directory", error=error, filename=error.filename)
-
-    logger().info("Getting Xenium output directories")
+    logger().info("Searching for Xenium output directories")
 
     with open_output(output_path, encoding="utf-8") as writer:
-        for dirpath, dirnames, filenames in root_path.walk(
-            on_error=on_error, follow_symlinks=False
-        ):
-            logger().debug("Considering dirpath", dirpath=dirpath)
+        num_dirs, num_errors, num_experiments = get_xenium_output_directories(
+            root_path, writer
+        )
 
-            if EXPERIMENT_FILENAME in filenames:
-                try:
-                    print(dirpath, file=writer)
-                except BrokenPipeError:
-                    # Support being used in a pipeline with filtering
-                    # e.g. get-xenium-output-directories | head -n 1
-                    sys.exit(0)
+    if num_errors:
+        logger().error(
+            "Some parts of tree could not be searched",
+            num_dirs=num_dirs,
+            num_experiments=num_experiments,
+            num_errors=num_errors,
+        )
+        sys.exit(1)
 
-    logger().info("Got Xenium output directories")
+    logger().info(
+        "Search completed",
+        num_dirs=num_dirs,
+        num_experiments=num_experiments,
+        num_errors=num_errors,
+    )
 
 
 if __name__ == "__main__":

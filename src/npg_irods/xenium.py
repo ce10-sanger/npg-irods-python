@@ -19,6 +19,7 @@ from typing import Callable
 
 import json
 from pathlib import Path, PurePath
+from typing import BinaryIO, TextIO, Any
 
 from partisan.irods import AVU, Collection
 from structlog.stdlib import get_logger
@@ -254,3 +255,30 @@ def _irods_partial_path(result_dir: Path) -> PurePath:
         ) from e
 
     return PurePath(instrument, slide_id, d.name)
+
+
+def get_xenium_output_directories(
+    root_path: Path, writer: BinaryIO | TextIO | Any
+) -> tuple[int, int, int]:
+    num_dirs, num_experiments, num_errors = 0, 0, 0
+
+    def on_error(error: OSError):
+        nonlocal num_errors
+        num_errors += 1
+        log.error("Could not scan directory", error=error, filename=error.filename)
+
+    for dirpath, dirnames, filenames in root_path.walk(
+        on_error=on_error, follow_symlinks=False
+    ):
+        num_dirs += 1
+        log.debug("Considering dirpath", dirpath=dirpath)
+
+        # Path.walk is not deterministic
+        dirnames.sort()
+        filenames.sort()
+
+        if EXPERIMENT_FILENAME in filenames:
+            num_experiments += 1
+            print(dirpath, file=writer)
+
+    return num_dirs, num_errors, num_experiments
