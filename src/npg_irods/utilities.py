@@ -31,6 +31,8 @@ import os
 import re
 import sys
 import threading
+from typing import Callable
+
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from importlib import resources
@@ -1355,6 +1357,7 @@ def sanitise_path(path: str | None) -> str | None:
             raise ValueError(f"Invalid character in '{path}' at position {i}: '{char}'")
 
     return path
+
 
 def make_get_checksum(md5sums_path: Path) -> Callable[[Path | str], str]:
     md5sums = read_md5sums_file(md5sums_path)

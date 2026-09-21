@@ -28,6 +28,7 @@ from npg.log import configure_structlog
 from partisan.irods import AC, AVU, Permission
 
 from npg_irods import add_appinfo_structlog_processor
+from npg_irods.arguments import add_checksum_arguments, make_checksum_fn
 from npg_irods.common import infer_zone
 from npg_irods.functions import make_path_filter
 from npg_irods.publish import publish_directory
@@ -151,28 +152,7 @@ def main():
         type=argparse.FileType("r", encoding="UTF-8"),
         default=None,
     )
-    checksums_group = parser.add_mutually_exclusive_group(required=False)
-    checksums_group.add_argument(
-        "--use-checksum-files",
-        help="Expect checksum files to be present alongside the data files with "
-        "the same name as the data file but with an additional '.md5' extension"
-        "e.g. 'data.txt' and 'data.txt.md5'. Each checksum file should contain only "
-        "the single MD5 checksum of the corresponding data file. This avoids having "
-        "to calculate the checksums during the publish process. If this option is "
-        "enabled and a checksum file cannot be read, an error will be raised for "
-        "that file. Optional, defaults to false.",
-        action="store_true",
-    )
-    checksums_group.add_argument(
-        "--use-checksums-file",
-        help="Expect checksums to be present in a checksums file at path specified "
-        "following GNU coreutils md5sum format. This avoids having to calculate the "
-        "checksums during the publish process. If this option is enabled and a "
-        "checksum is missing or stale, an error will be raised for that file. "
-        "Optional, defaults to none.",
-        type=str,
-        default=None,
-    )
+    parser = add_checksum_arguments(parser)
     parser.add_argument(
         "--num-clients",
         help="Number of iRODS clients to use for the operation, maximum 24. "
@@ -263,21 +243,7 @@ def main():
         else None
     )
 
-    checksum_fn: Callable[[Path | str], str] | None
-    if args.use_checksum_files:
-        checksum_fn = read_md5_file
-    elif args.use_checksums_file:
-        try:
-            checksum_fn = make_get_checksum(Path(args.use_checksums_file))
-        except Exception as e:
-            logger().error(
-                "Failed to read checksums file",
-                path=args.use_checksums_file,
-                error=str(e),
-            )
-            raise e
-    else:
-        checksum_fn = None
+    checksum_fn = make_checksum_fn(args)
 
     num_items, num_processed, num_errors = publish_directory(
         args.directory,
