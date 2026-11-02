@@ -685,7 +685,8 @@ class TestPublish:
             DataObject(dest / "outside.txt").read() == (outside / "c.txt").read_text()
         ), "Should follow link and archive contents of linked file, not the symbolic link"
 
-    def test_todo(self):
+    @patch("partisan.irods.Baton.put", autospec=True)
+    def test_todo(self, mock_put: Mock):
         # TODO:
         # ACL cases
         # - no acl
@@ -694,6 +695,10 @@ class TestPublish:
         # Inheritance cases
         # - enabled
         # - not enabled
+
+        # TODO: Simulate irods outage
+        # TODO: Data objects are created (inherting incorrect public permission)
+        # TODO: however report as failure, so that future ACL logic etc doesn't run
 
         # Act
         # TODO: Publish
