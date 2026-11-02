@@ -104,11 +104,23 @@ def publish_directory(
         coll = Collection(dest, pool=bp)
 
         try:
+            # Ensure parent collection exists.
             # TODO: What is the background/intent? Collection.put aleady creates collection
             # TODO: Is this about parent directory?
-            # Follow npg_publish_tree.pl behaviour
+            # This matches npg_publish_tree.pl behaviour.
+            # TODO: Was there a point where created parents in rnd_platforms / npg_ultima?
             coll.create(parents=True, exist_ok=True, timeout=timeout, tries=tries)
 
+            # Update permissions on destination collection before adding collections and
+            # data objects beneath. This ordering is significant when inheritance is enabled
+            # as it
+            # 1) avoids public permissions being inherited and possibly not removed
+            #    if there's a failure during data object creation
+            # 2) reduces iRODS operations later in the typical case of dest not already existing.
+            #    Items will be created with desired permissions
+            # It is still necessary to update permissions later as inheritance might be disabled
+            # and/or items may already exist and need their permissions adjusted.
+            
             public_acl = [ac for ac in coll.permissions() if
                           is_public_access(ac)]
             if public_acl and not any(
