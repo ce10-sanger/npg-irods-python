@@ -684,3 +684,23 @@ class TestPublish:
         assert (
             DataObject(dest / "outside.txt").read() == (outside / "c.txt").read_text()
         ), "Should follow link and archive contents of linked file, not the symbolic link"
+
+    def test_todo(self):
+        # TODO:
+        # ACL cases
+        # - no acl
+        # - study
+        # - public
+        # Inheritance cases
+        # - enabled
+        # - not enabled
+
+        # Act
+        # TODO: Publish
+        # TODO: Simulate data object puts failing
+
+        # Assert
+        # TODO
+
+        # Assert permissions on top level directory
+        # Assert permissions on data objects

@@ -106,6 +106,19 @@ def publish_directory(
         try:
             # Follow npg_publish_tree.pl behaviour
             coll.create(parents=True, exist_ok=True, timeout=timeout, tries=tries)
+
+            public_acl = [ac for ac in coll.permissions() if
+                          is_public_access(ac)]
+            if public_acl and not any(
+                    is_public_access(ac) for ac in (acl or [])):
+                to_null = [
+                    AC(PUBLIC_IRODS_GROUP, Permission.NULL, zone=ac.zone)
+                    for ac in public_acl
+                ]
+                acl = (acl or []) + to_null
+
+            if acl is not None:
+                update_permissions(coll, acl=acl)
         except Exception as e:
             log.error("Error creating collection", path=coll, error=str(e))
 
