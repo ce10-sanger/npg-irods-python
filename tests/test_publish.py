@@ -23,7 +23,7 @@ from os.path import relpath
 from unittest.mock import patch, Mock
 
 import pytest
-from partisan.irods import AC, AVU, Collection, Permission, DataObject
+from partisan.irods import AC, AVU, Collection, Permission, DataObject, Baton
 from pytest import mark as m, MonkeyPatch
 
 from helpers import (
@@ -685,8 +685,31 @@ class TestPublish:
             DataObject(dest / "outside.txt").read() == (outside / "c.txt").read_text()
         ), "Should follow link and archive contents of linked file, not the symbolic link"
 
-    @patch("partisan.irods.Baton.put", autospec=True)
-    def test_todo(self, mock_put: Mock):
+    # @patch("partisan.irods.Baton.put", autospec=True)
+    def test_todo(self, public_unmanaged_inheritance_enabled_collection: PurePath, monkeypatch):
+        src = Path("./tests/data/simple/collection")
+        dest = public_unmanaged_inheritance_enabled_collection / "missing" / "sub"
+
+        # , mock_put: Mock):
+
+        original_put = Baton.put
+
+        def patched_put(self_, *args, **kwargs):
+            original_put(self_, *args, **kwargs)
+            raise Exception()
+
+        monkeypatch.setattr(Baton, "put", patched_put)
+
+        num_items, num_processed, num_errors = publish_directory(src, dest, acl=[])
+
+        assert num_items == 4
+        assert num_processed == 2
+        assert num_errors == 2
+
+        assert PUBLIC_AC not in DataObject(dest / "a.txt").acl()
+        assert PUBLIC_AC not in Collection(dest / "sub").acl()
+        assert PUBLIC_AC not in DataObject(dest / "sub/b.txt").acl()
+
         # TODO:
         # ACL cases
         # - no acl
