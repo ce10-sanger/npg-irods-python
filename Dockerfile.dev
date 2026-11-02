@@ -1,6 +1,6 @@
 FROM ghcr.io/wtsi-npg/ub-22.04-baton-irods-4.3.4:latest
 
-ARG PYTHON_VERSION=3.14
+ARG PYTHON_VERSION=3.14.9
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -23,7 +23,14 @@ RUN apt-get update && \
     libsqlite3-dev \
     libreadline-dev \
     libssl-dev \
-    zlib1g-dev
+    zlib1g-dev && \
+    sed -i \
+    -e 's|^mozilla/emSign_ECC_Root_CA_-_G3.crt|!&|' \
+    -e 's|^mozilla/Comodo_AAA_Services_root.crt|!&|' \
+    /etc/ca-certificates.conf && \
+    update-ca-certificates && \
+    ! grep -Eq '^mozilla/(emSign_ECC_Root_CA_-_G3|Comodo_AAA_Services_root)\.crt$' \
+    /etc/ca-certificates.conf
 
 # Install the iRODS icommands package because it's useful for interactions with \
 # the server during development
@@ -50,6 +57,7 @@ ENV MAKE_OPTS="-j 8"
 
 RUN pyenv install "$PYTHON_VERSION"
 RUN pyenv global "$PYTHON_VERSION"
+RUN python -c 'import pip, sys; assert sys.version_info[:3] == (3, 14, 9); assert pip.__version__ == "26.2.2"'
 
 COPY requirements.txt test-requirements.txt /app/
 

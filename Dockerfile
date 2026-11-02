@@ -1,6 +1,6 @@
 FROM --platform=linux/amd64 ubuntu:bionic AS builder
 
-ARG PYTHON_VERSION=3.14
+ARG PYTHON_VERSION=3.14.9
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -23,7 +23,14 @@ RUN apt-get update && \
     libssl-dev \
     zlib1g-dev \
     unattended-upgrades && \
-    unattended-upgrade -d -v
+    unattended-upgrade -d -v && \
+    sed -i \
+    -e 's|^mozilla/emSign_ECC_Root_CA_-_G3.crt|!&|' \
+    -e 's|^mozilla/Comodo_AAA_Services_root.crt|!&|' \
+    /etc/ca-certificates.conf && \
+    update-ca-certificates && \
+    ! grep -Eq '^mozilla/(emSign_ECC_Root_CA_-_G3|Comodo_AAA_Services_root)\.crt$' \
+    /etc/ca-certificates.conf
 
 WORKDIR /app
 
@@ -58,7 +65,7 @@ RUN curl -fsSLO "https://sqlite.org/2026/sqlite-autoconf-${SQLITE_AUTOCONF_VERSI
 
 RUN pyenv install "$PYTHON_VERSION"
 RUN pyenv global "$PYTHON_VERSION"
-
+RUN python -c 'import pip, sys; assert sys.version_info[:3] == (3, 14, 9); assert pip.__version__ == "26.2.2"'
 
 # This drives the choice of base system for this Dockerfile. iRODS 4.2.11 is not
 # available for anything more recent than Ubuntu bionic, so that's what we use for
@@ -75,7 +82,14 @@ RUN apt-get update && \
     ca-certificates \
     git \
     unattended-upgrades && \
-    unattended-upgrade -d -v
+    unattended-upgrade -d -v && \
+    sed -i \
+    -e 's|^mozilla/emSign_ECC_Root_CA_-_G3.crt|!&|' \
+    -e 's|^mozilla/Comodo_AAA_Services_root.crt|!&|' \
+    /etc/ca-certificates.conf && \
+    update-ca-certificates && \
+    ! grep -Eq '^mozilla/(emSign_ECC_Root_CA_-_G3|Comodo_AAA_Services_root)\.crt$' \
+    /etc/ca-certificates.conf
 
 RUN echo "deb [arch=amd64] https://packages.irods.org/apt/ $(lsb_release -sc) main" |\
     tee /etc/apt/sources.list.d/renci-irods.list && \
