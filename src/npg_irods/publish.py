@@ -100,6 +100,19 @@ def publish_directory(
 
     num_threads = num_clients + int(num_clients / 4) + 1
 
+    def calculate_acl_diff(item: Collection | DataObject, acls_to_add: list[AC]):
+        public_acl = [ac for ac in coll.permissions() if
+                      is_public_access(ac)]
+        if public_acl and not any(
+                is_public_access(ac) for ac in (acl or [])):
+            to_null = [
+                AC(PUBLIC_IRODS_GROUP, Permission.NULL, zone=ac.zone)
+                for ac in public_acl
+            ]
+            acl = (acl or []) + to_null
+
+        return acls
+
     with client_pool(maxsize=num_clients) as bp:
         coll = Collection(dest, pool=bp)
 
@@ -120,7 +133,9 @@ def publish_directory(
             #    Items will be created with desired permissions
             # It is still necessary to update permissions later as inheritance might be disabled
             # and/or items may already exist and need their permissions adjusted.
-            
+
+            # TODO: Make this clearer
+
             public_acl = [ac for ac in coll.permissions() if
                           is_public_access(ac)]
             if public_acl and not any(
