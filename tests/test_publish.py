@@ -686,7 +686,9 @@ class TestPublish:
         ), "Should follow link and archive contents of linked file, not the symbolic link"
 
     # @patch("partisan.irods.Baton.put", autospec=True)
-    def test_todo(self, public_unmanaged_inheritance_enabled_collection: PurePath, monkeypatch):
+    def test_todo(
+        self, public_unmanaged_inheritance_enabled_collection: PurePath, monkeypatch
+    ):
         src = Path("./tests/data/simple/collection")
         dest = public_unmanaged_inheritance_enabled_collection / "missing" / "sub"
 
