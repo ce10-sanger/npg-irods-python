@@ -126,11 +126,11 @@ def publish_directory(
 
             # Update permissions on destination collection before adding collections and
             # data objects beneath. This ordering is significant when inheritance is enabled
-            # as it
-            # 1) avoids public permissions being inherited and possibly not removed
-            #    if there's a failure during data object creation
-            # 2) reduces iRODS operations later in the typical case of dest not already existing.
-            #    Items will be created with desired permissions
+            # as it:
+            # - Avoids public permissions being inherited from parent collection and
+            #    possibly not removed if there's a failure during data object creation.
+            # - Reduces iRODS operations later in the typical case of destination not
+            #   already existing. Items will be get desired permissions on creation.
             # It is still necessary to update permissions later as inheritance might be disabled
             # and/or items may already exist and need their permissions adjusted.
             acl_update = _calculate_acl_update(coll, acl_to_add=acl)
