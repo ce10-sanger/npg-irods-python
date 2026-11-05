@@ -121,11 +121,7 @@ def publish_directory(
         coll = Collection(dest, pool=bp)
 
         try:
-            # Ensure parent collection exists.
-            # TODO: What is the background/intent? Collection.put aleady creates collection
-            # TODO: Is this about parent directory?
-            # This matches npg_publish_tree.pl behaviour.
-            # TODO: Was there a point where created parents in rnd_platforms / npg_ultima?
+            # Ensure parent collection exists (matching npg_publish_tree.pl).
             coll.create(parents=True, exist_ok=True, timeout=timeout, tries=tries)
 
             # Update permissions on destination collection before adding collections and
@@ -137,7 +133,6 @@ def publish_directory(
             #    Items will be created with desired permissions
             # It is still necessary to update permissions later as inheritance might be disabled
             # and/or items may already exist and need their permissions adjusted.
-
             acl_update = _calculate_acl_update(coll, acl_to_add=acl)
             if acl_update:
                 update_permissions(coll, acl_update)

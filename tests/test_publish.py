@@ -685,52 +685,46 @@ class TestPublish:
             DataObject(dest / "outside.txt").read() == (outside / "c.txt").read_text()
         ), "Should follow link and archive contents of linked file, not the symbolic link"
 
-    # @patch("partisan.irods.Baton.put", autospec=True)
-    def test_todo(
-        self, public_unmanaged_inheritance_enabled_collection: PurePath, monkeypatch
+    # TODO: Inheritance disabled case
+    @m.context("When publishing with non-public acl")
+    @m.context("and put operation fails")
+    @m.it("publishes without public permissions")
+    @m.parametrize(
+        "acl",
+        [
+            pytest.param([STUDY_AC], id="study"),
+            pytest.param(None, id="private"),
+        ],
+    )
+    def test_publish_put_failure_fail_non_public(
+        self,
+        public_unmanaged_inheritance_enabled_collection: PurePath,
+        monkeypatch,
+        acl: list[AC] | None,
     ):
+        # Arrange
         src = Path("./tests/data/simple/collection")
-        dest = public_unmanaged_inheritance_enabled_collection / "missing" / "sub"
+        dest = public_unmanaged_inheritance_enabled_collection
 
-        # , mock_put: Mock):
-
+        # Simulate iRODS outage. Data objects created (inheriting public permissions)
+        # however reported as failure.
         original_put = Baton.put
 
         def patched_put(self_, *args, **kwargs):
             original_put(self_, *args, **kwargs)
-            raise Exception()
+            raise Exception("iRODS outage")
 
         monkeypatch.setattr(Baton, "put", patched_put)
 
-        num_items, num_processed, num_errors = publish_directory(src, dest, acl=[])
+        # Act
+        num_items, num_processed, num_errors = publish_directory(src, dest, acl=acl)
 
+        # Assert
         assert num_items == 4
         assert num_processed == 2
         assert num_errors == 2
 
+        assert PUBLIC_AC not in Collection(dest).acl()
         assert PUBLIC_AC not in DataObject(dest / "a.txt").acl()
         assert PUBLIC_AC not in Collection(dest / "sub").acl()
         assert PUBLIC_AC not in DataObject(dest / "sub/b.txt").acl()
-
-        # TODO:
-        # ACL cases
-        # - no acl
-        # - study
-        # - public
-        # Inheritance cases
-        # - enabled
-        # - not enabled
-
-        # TODO: Simulate irods outage
-        # TODO: Data objects are created (inherting incorrect public permission)
-        # TODO: however report as failure, so that future ACL logic etc doesn't run
-
-        # Act
-        # TODO: Publish
-        # TODO: Simulate data object puts failing
-
-        # Assert
-        # TODO
-
-        # Assert permissions on top level directory
-        # Assert permissions on data objects
