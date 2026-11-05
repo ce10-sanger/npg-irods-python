@@ -685,7 +685,6 @@ class TestPublish:
             DataObject(dest / "outside.txt").read() == (outside / "c.txt").read_text()
         ), "Should follow link and archive contents of linked file, not the symbolic link"
 
-    # TODO: Inheritance disabled case
     @m.context("When publishing with non-public acl")
     @m.context("and put operation fails")
     @m.it("publishes without public permissions")
@@ -698,13 +697,13 @@ class TestPublish:
     )
     def test_publish_put_failure_fail_non_public(
         self,
-        public_unmanaged_inheritance_enabled_collection: PurePath,
+        public_unmanaged_collection: PurePath,
         monkeypatch,
         acl: list[AC] | None,
     ):
         # Arrange
         src = Path("./tests/data/simple/collection")
-        dest = public_unmanaged_inheritance_enabled_collection
+        dest = public_unmanaged_collection
 
         # Simulate iRODS outage. Data objects created (inheriting public permissions)
         # however reported as failure.
