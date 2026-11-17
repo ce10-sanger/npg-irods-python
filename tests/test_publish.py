@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright © 2025 Genome Research Ltd. All rights reserved.
+# Copyright © 2025, 2026 Genome Research Ltd. All rights reserved.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,26 +15,35 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-from pathlib import Path
+import os
+import shutil
+from pathlib import Path, PurePath
 from os import getcwd
 from os.path import relpath
 from unittest.mock import patch, Mock
 
 import pytest
-from partisan.irods import AC, AVU, Collection, Permission, DataObject
+from partisan.irods import AC, AVU, Collection, Permission, DataObject, Baton
 from pytest import mark as m, MonkeyPatch
 
-from helpers import is_inheritance_enabled, PUBLIC_AC, ADMIN_AC, STUDY_AC, UNMANAGED_AC
+from helpers import (
+    history_in_meta,
+    is_inheritance_enabled,
+    PUBLIC_AC,
+    ADMIN_AC,
+    STUDY_AC,
+    UNMANAGED_AC,
+    STUDY2_AC,
+)
 from npg_irods.exception import PublishingError
+from npg_irods.metadata.common import DataFile
 from npg_irods.publish import publish_directory
 
 
 @m.describe("Publish")
 class TestPublish:
-    @m.context(
-        "Publishing a local directory and "
-        "the local directory does not exist and error handling is enabled"
-    )
+    @m.context("When the local directory does not exist")
+    @m.context("and error handling is enabled")
     @m.it("Returns the expected error count")
     def test_publish_non_existent_dir_yield(self, tmpdir, empty_collection_path):
         num_items, num_processed, num_errors = publish_directory(
@@ -44,9 +53,8 @@ class TestPublish:
         assert num_processed == 0
         assert num_errors == 1
 
-    @m.context(
-        "When the local directory does not exist and error handling is not enabled"
-    )
+    @m.context("When the local directory does not exist")
+    @m.context("and error handling is not enabled")
     @m.it("Raises a PublishingError")
     def test_publish_non_existent_dir_err(self, tmpdir, empty_collection_path):
         with pytest.raises(PublishingError, match="Error while publishing") as exc_info:
@@ -59,7 +67,7 @@ class TestPublish:
         assert exc_info.value.num_processed == 0
         assert exc_info.value.num_errors == 1
 
-    @m.context("When the directory is empty")
+    @m.context("When the local directory is empty")
     @m.it("Creates an empty collection in iRODS and returns the expected item counts")
     def test_publish_empty_dir(self, tmpdir, empty_collection_path):
         num_items, num_processed, num_errors = publish_directory(
@@ -88,6 +96,116 @@ class TestPublish:
             DataObject(dest / "sub/b.txt"),
         ]
 
+    @m.context("When data objects already exist at the target")
+    @m.it(
+        "Republishes with force or fill, recording checksum history for changed files, "
+        "and rejects overwrites without either option"
+    )
+    @m.parametrize(
+        "force, fill",
+        [
+            pytest.param(True, False, id="force"),
+            pytest.param(False, True, id="fill"),
+            pytest.param(False, False, id="neither"),
+        ],
+    )
+    @m.parametrize(
+        "append_text, republished_checksum",
+        [
+            pytest.param("", "cac862166e910d51dc16aa0eab7a7a7c", id="unchanged"),
+            pytest.param(
+                "##########", "6bf5c967a545ba64484da2bcfae8f80a", id="changed"
+            ),
+        ],
+    )
+    def test_republish(
+        self,
+        tmp_path: Path,
+        empty_collection_path: PurePath,
+        force: bool,
+        fill: bool,
+        append_text: str,
+        republished_checksum: str,
+    ):
+        tmp_dir = tmp_path / "src"
+        src = shutil.copytree(Path("./tests/data/simple/collection"), tmp_dir)
+        dest = empty_collection_path
+
+        # Initial publish
+        num_items, num_processed, num_errors = publish_directory(src, dest)
+        assert (num_items, num_processed, num_errors) == (4, 4, 0)
+
+        contents = Collection(dest).contents(recurse=True)
+        assert contents == [
+            Collection(dest / "sub"),
+            DataObject(dest / "a.txt"),
+            DataObject(dest / "sub/b.txt"),
+        ]
+        a, b = contents[1:]
+
+        a_checksum = "cac862166e910d51dc16aa0eab7a7a7c"
+        b_checksum = "92f14d525211301f5ccb1ab6a8884fb3"
+
+        assert a.checksum() == a_checksum
+        assert a.avu(DataFile.MD5).value == a_checksum
+        assert b.checksum() == b_checksum
+        assert b.avu(DataFile.MD5).value == b_checksum
+
+        # Maybe modify a.txt
+        if append_text:
+            with open(src / "a.txt", "a") as f:
+                f.write(append_text)
+
+        # Republish
+        if force or fill:
+            # Success with force or fill
+            num_items, num_processed, num_errors = publish_directory(
+                src, dest, force=force, fill=fill, handle_exceptions=False
+            )
+            assert (num_items, num_processed, num_errors) == (4, 4, 0)
+            expected_a_checksum = republished_checksum
+        else:
+            # Failure without force or fill
+            with pytest.raises(PublishingError, match="Error while publishing") as err:
+                publish_directory(
+                    src, dest, force=force, fill=fill, handle_exceptions=False
+                )
+            assert isinstance(err.value.__cause__, FileExistsError)
+            assert err.value.src == src
+            assert err.value.dest == dest
+            assert err.value.num_processed == 2
+            assert err.value.num_errors == 2
+            expected_a_checksum = a_checksum
+
+        contents = Collection(dest).contents(recurse=True)
+        assert contents == [
+            Collection(dest / "sub"),
+            DataObject(dest / "a.txt"),
+            DataObject(dest / "sub/b.txt"),
+        ]
+        a, b = contents[1:]
+
+        assert a.checksum() == expected_a_checksum
+        assert a.avu(DataFile.MD5).value == expected_a_checksum
+
+        # Check a.txt for presence of history
+        expect_history = bool(append_text) and (force or fill)
+        assert (
+            history_in_meta(
+                AVU.history(AVU(DataFile.MD5, a_checksum)),
+                a.metadata(),
+            )
+            == expect_history
+        ), "Unexpected MD5 history for a.txt"
+
+        # Check b.txt for absence of history
+        assert b.checksum() == b_checksum
+        assert b.avu(DataFile.MD5).value == b_checksum
+        assert not history_in_meta(
+            AVU.history(AVU(DataFile.MD5, b_checksum)),
+            b.metadata(),
+        ), "Unexpected MD5 history present"
+
     @m.context("When an ACL is provided")
     @m.it("Adds it to the published collections and data objects")
     def test_publish_with_acl(self, empty_collection_path):
@@ -104,6 +222,84 @@ class TestPublish:
             perms = item.acl()
             for ac in acl:
                 assert ac in perms
+
+    @m.context("When items already have managed permissions")
+    @m.it("Replaces managed permissions when an ACL is specified")
+    @m.parametrize(
+        "force, fill",
+        [
+            pytest.param(True, False, id="force"),
+            pytest.param(False, True, id="fill"),
+        ],
+    )
+    @m.parametrize(
+        "existing_managed_or_public_acl, new_managed_or_public_acl, expected_managed_or_public_acl",
+        [
+            pytest.param([STUDY_AC], None, [], id="none"),
+            pytest.param([STUDY_AC, PUBLIC_AC], None, [], id="none-existing-public"),
+            pytest.param([STUDY_AC], [], [], id="empty"),
+            pytest.param([STUDY_AC, PUBLIC_AC], [], [], id="empty-existing-public"),
+            pytest.param([STUDY_AC], [PUBLIC_AC], [PUBLIC_AC], id="public"),
+            pytest.param(
+                [STUDY_AC, PUBLIC_AC],
+                [PUBLIC_AC],
+                [PUBLIC_AC],
+                id="public-existing-public",
+            ),
+            pytest.param(
+                [STUDY_AC],
+                [STUDY2_AC],
+                [STUDY2_AC],
+                id="other-study",
+            ),
+            pytest.param(
+                [STUDY_AC, PUBLIC_AC],
+                [STUDY2_AC],
+                [STUDY2_AC],
+                id="other-study-existing-public",
+            ),
+        ],
+    )
+    def test_republish_managed_permissions(
+        self,
+        public_unmanaged_inheritance_enabled_collection,
+        force: bool,
+        fill: bool,
+        existing_managed_or_public_acl: list[AC],
+        new_managed_or_public_acl: list[AC] | None,
+        expected_managed_or_public_acl: list[AC],
+    ):
+        # Arrange
+        src = Path("./tests/data/simple/collection")
+        dest = public_unmanaged_inheritance_enabled_collection
+        num_items, num_processed, num_errors = publish_directory(
+            src, dest, acl=existing_managed_or_public_acl
+        )
+        assert (num_items, num_processed, num_errors) == (4, 4, 0)
+        coll = Collection(dest)
+        items = [coll, *coll.contents(recurse=True)]
+        assert len(items) == 4
+        for item in items:
+            assert set(item.acl()) == {
+                ADMIN_AC,
+                UNMANAGED_AC,
+                *existing_managed_or_public_acl,
+            }
+
+        # Act
+        num_items, num_processed, num_errors = publish_directory(
+            src, dest, force=force, fill=fill, acl=new_managed_or_public_acl
+        )
+
+        # Assert
+        assert (num_items, num_processed, num_errors) == (4, 4, 0)
+
+        for item in items:
+            assert set(item.acl()) == {
+                ADMIN_AC,
+                UNMANAGED_AC,
+                *expected_managed_or_public_acl,
+            }
 
     @m.context("When metadata are provided")
     @m.it("Adds it to the published root collection, but not to its contents")
@@ -141,7 +337,8 @@ class TestPublish:
         assert exc_info.value.num_processed == 4
         assert exc_info.value.num_errors == 1  # One error from the root collection
 
-    @m.context("When src inside working directory and specified with relative path")
+    @m.context("When src inside working directory")
+    @m.context("and specified with relative path")
     @m.it("Passes relative paths to filter_fn")
     def test_publish_inside_working_directory_relative_src(self, empty_collection_path):
         src = Path("./tests/data/simple/collection")
@@ -155,7 +352,8 @@ class TestPublish:
         expected_paths = [parent / x for x in children]
         assert paths == expected_paths, "Expected relative paths"
 
-    @m.context("When src inside working directory and specified with absolute path")
+    @m.context("When src inside working directory")
+    @m.context("and specified with absolute path")
     @m.it("Passes absolute paths to filter_fn")
     def test_publish_inside_working_directory_absolute_src(self, empty_collection_path):
         src = Path("./tests/data/simple/collection").absolute()
@@ -169,7 +367,8 @@ class TestPublish:
         expected_paths = [parent / x for x in children]
         assert paths == expected_paths, f"Expected absolute paths"
 
-    @m.context("When src outside working directory and specified with relative path")
+    @m.context("When src outside working directory")
+    @m.context("and specified with relative path")
     @m.it("Passes relative paths to filter_fn")
     def test_publish_outside_working_directory(
         self, tmpdir, empty_collection_path, monkeypatch: MonkeyPatch
@@ -188,7 +387,8 @@ class TestPublish:
         expected_paths = [parent / x for x in children]
         assert paths == expected_paths, "Expected relative paths"
 
-    @m.context("When src outside working directory and specified with absolute path")
+    @m.context("When src outside working directory")
+    @m.context("and specified with absolute path")
     @m.it("Passes absolute paths to filter_fn")
     def test_publish_outside_working_directory_absolute_src(
         self, tmpdir, empty_collection_path, monkeypatch: MonkeyPatch
@@ -563,3 +763,47 @@ class TestPublish:
         assert (
             DataObject(dest / "outside.txt").read() == (outside / "c.txt").read_text()
         ), "Should follow link and archive contents of linked file, not the symbolic link"
+
+    @m.context("When publishing with non-public acl")
+    @m.context("and put operation fails")
+    @m.it("publishes without public permissions")
+    @m.parametrize(
+        "acl",
+        [
+            pytest.param([STUDY_AC], id="study"),
+            pytest.param([], id="private-empty"),
+            pytest.param(None, id="private-none"),
+        ],
+    )
+    def test_publish_put_failure_fail_non_public(
+        self,
+        public_unmanaged_collection: PurePath,
+        monkeypatch,
+        acl: list[AC] | None,
+    ):
+        # Arrange
+        src = Path("./tests/data/simple/collection")
+        dest = public_unmanaged_collection
+
+        # Simulate iRODS outage. Data objects created (inheriting public permissions)
+        # however reported as failure.
+        original_put = Baton.put
+
+        def patched_put(self_, *args, **kwargs):
+            original_put(self_, *args, **kwargs)
+            raise Exception("iRODS outage")
+
+        monkeypatch.setattr(Baton, "put", patched_put)
+
+        # Act
+        num_items, num_processed, num_errors = publish_directory(src, dest, acl=acl)
+
+        # Assert
+        assert num_items == 4
+        assert num_processed == 2
+        assert num_errors == 2
+
+        assert PUBLIC_AC not in Collection(dest).acl()
+        assert PUBLIC_AC not in DataObject(dest / "a.txt").acl()
+        assert PUBLIC_AC not in Collection(dest / "sub").acl()
+        assert PUBLIC_AC not in DataObject(dest / "sub/b.txt").acl()

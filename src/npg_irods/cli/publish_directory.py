@@ -24,13 +24,14 @@ from pathlib import Path
 import structlog
 from npg.cli import add_logging_arguments, integer_in_range
 from npg.log import configure_structlog
-from partisan.irods import AC, AVU, Permission, current_user
+from partisan.irods import AC, AVU, Permission
 
 from npg_irods import add_appinfo_structlog_processor
+from npg_irods.arguments import add_checksum_arguments, make_checksum_fn
 from npg_irods.common import infer_zone
 from npg_irods.functions import make_path_filter
 from npg_irods.publish import publish_directory
-from npg_irods.utilities import make_get_checksum, read_md5_file
+from npg_irods.utilities import read_md5_file, make_get_checksum
 
 description = """
 A utility to (recursively) publish a local directory to iRODS, retaining the directory
@@ -130,13 +131,12 @@ def main():
 
     parser.add_argument(
         "--group",
-        help="Add read access for the given iRODS group. "
-        "Optional, defaults to none. "
-        "May be used multiple times to add read permissions for multiple groups. "
-        "For new items, adds read access in addition to any inherited permissions. "
-        "For existing items, in addition to existing permissions. "
-        "Unless explicitly specified, public permissions are removed. "  # See ADR 1
-        "Zone may be specified with #zone suffix, otherwise inferred from collection.",
+        help="The managed (e.g. ss_XXX) and/or public read permissions items should be published with. "
+        "Items may also be published with unmanaged permissions, through inheritance or existing permissions. "
+        "May be used multiple times to specify read permissions for multiple groups. "
+        "Zone may be specified with #zone suffix, otherwise inferred from collection. "
+        "Any existing managed or public permissions not explicitly specified are removed. "  # See ADR 1
+        "Optional, defaults to removing all managed and/or public permissions.",
         type=str,
         action="append",
         default=[],
@@ -150,28 +150,7 @@ def main():
         type=argparse.FileType("r", encoding="UTF-8"),
         default=None,
     )
-    checksums_group = parser.add_mutually_exclusive_group(required=False)
-    checksums_group.add_argument(
-        "--use-checksum-files",
-        help="Expect checksum files to be present alongside the data files with "
-        "the same name as the data file but with an additional '.md5' extension"
-        "e.g. 'data.txt' and 'data.txt.md5'. Each checksum file should contain only "
-        "the single MD5 checksum of the corresponding data file. This avoids having "
-        "to calculate the checksums during the publish process. If this option is "
-        "enabled and a checksum file cannot be read, an error will be raised for "
-        "that file. Optional, defaults to false.",
-        action="store_true",
-    )
-    checksums_group.add_argument(
-        "--use-checksums-file",
-        help="Expect checksums to be present in a checksums file at path specified "
-        "following GNU coreutils md5sum format. This avoids having to calculate the "
-        "checksums during the publish process. If this option is enabled and a "
-        "checksum is missing or stale, an error will be raised for that file. "
-        "Optional, defaults to none.",
-        type=str,
-        default=None,
-    )
+    parser = add_checksum_arguments(parser)
     parser.add_argument(
         "--num-clients",
         help="Number of iRODS clients to use for the operation, maximum 24. "
@@ -245,6 +224,8 @@ def main():
         fill=args.fill,
         force=args.force,
         num_clients=num_clients,
+        argv=sys.argv,
+        args=vars(args),
     )
 
     filter_fn = (
@@ -262,21 +243,7 @@ def main():
         else None
     )
 
-    checksum_fn = None
-    if args.use_checksum_files:
-        checksum_fn = read_md5_file
-    elif args.use_checksums_file:
-        try:
-            checksum_fn = make_get_checksum(Path(args.use_checksums_file))
-        except Exception as e:
-            logger().error(
-                "Failed to read checksums file",
-                path=args.use_checksums_file,
-                error=str(e),
-            )
-            raise e
-    else:
-        checksum_fn = None
+    checksum_fn = make_checksum_fn(args)
 
     num_items, num_processed, num_errors = publish_directory(
         args.directory,

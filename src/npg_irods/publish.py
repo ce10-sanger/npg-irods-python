@@ -25,7 +25,11 @@ from structlog.stdlib import get_logger
 
 from npg_irods.common import update_metadata, update_permissions
 from npg_irods.exception import PublishingError
-from npg_irods.metadata.common import ensure_common_metadata, PUBLIC_IRODS_GROUP
+from npg_irods.metadata.common import (
+    ensure_common_metadata,
+    PUBLIC_IRODS_GROUP,
+    ensure_matching_checksum_metadata,
+)
 from npg_irods.metadata.lims import is_public_access
 
 log = get_logger(__name__)
@@ -53,8 +57,9 @@ def publish_directory(
             exist; the contents of the source directory will be published into it.
         avus: A list of AVU objects to add to each of the published root collection. The
             default is None, meaning no AVUs are added.
-        acl: A list of AC objects to add to each of the published items. The default is
-            None, meaning no ACL is added.
+        acl: A list of AC objects to supersede any existing or inherited managed and/or
+            public ACL with. The default is None, meaning remove any existing managed
+            and/or public permissions.
         filter_fn: A filter function to apply to each item in the source directory. The
             function should take a single argument (the item) and return True if the
             item should be filtered out, or False if it should be included. The default
@@ -62,7 +67,7 @@ def publish_directory(
         local_checksum: A callable that returns a checksum for a local file. Optional,
             if None, each local file's MD5 checksum will be calculated. If local files
             are large, it may improve the publishing time to use this argument to
-            supply pre-caculated checksums. The callable should take a single argument
+            supply pre-calculated checksums. The callable should take a single argument
             (the file path) and return the checksum as a string.
         fill: Fill in missing data objects in iRODS. If a data object already
             exists, the operation is skipped for that path. See DataObject.put() for
@@ -84,6 +89,9 @@ def publish_directory(
     num_items, num_processed, num_errors = 0, 0, 0
     first_error: Exception | None = None
 
+    if acl is None:
+        acl = []
+
     if filter_fn is None:
         filter_fn = lambda _: False
 
@@ -96,12 +104,41 @@ def publish_directory(
 
     num_threads = num_clients + int(num_clients / 4) + 1
 
+    def _calculate_acl_update(
+        _item: Collection | DataObject, _acl: list[AC]
+    ) -> list[AC]:
+        """
+        Calculate the ACL update needed to ensure item does not have public access
+        unless explicitly specified.
+        """
+        _new_acl: list[AC] = _acl.copy()
+        curr_public_acl = [ac for ac in _item.permissions() if is_public_access(ac)]
+        if curr_public_acl and not any(is_public_access(ac) for ac in _new_acl):
+            to_null = [
+                AC(PUBLIC_IRODS_GROUP, Permission.NULL, zone=ac.zone)
+                for ac in curr_public_acl
+            ]
+            _new_acl.extend(to_null)
+        return _new_acl
+
     with client_pool(maxsize=num_clients) as bp:
         coll = Collection(dest, pool=bp)
 
         try:
-            # Follow npg_publish_tree.pl behaviour
+            # Ensure parent collection exists (matching npg_publish_tree.pl).
             coll.create(parents=True, exist_ok=True, timeout=timeout, tries=tries)
+
+            # Update permissions on destination collection before adding collections and
+            # data objects beneath. This ordering is significant when inheritance is enabled
+            # as it:
+            # - Avoids public permissions being inherited from parent collection and
+            #    possibly not removed if there's a failure during data object creation.
+            # - Reduces iRODS operations later in the typical case of destination not
+            #   already existing. Items will be get desired permissions on creation.
+            # It is still necessary to update permissions later as inheritance might be disabled
+            # and/or items may already exist and need their permissions adjusted.
+            new_acl = _calculate_acl_update(coll, _acl=acl)
+            update_permissions(coll, new_acl)
         except Exception as e:
             log.error("Error creating collection", path=coll, error=str(e))
 
@@ -139,6 +176,10 @@ def publish_directory(
             ):
                 num_items += 1
 
+                def _annotate(o):
+                    ensure_matching_checksum_metadata(o)
+                    ensure_common_metadata(o)
+
                 match item:
                     case Exception():
                         num_errors += 1
@@ -151,27 +192,17 @@ def publish_directory(
                     case Collection():
                         num_processed += 1
                     case DataObject():
-                        meta_updates.append(
-                            executor.submit(ensure_common_metadata, item)
-                        )
+                        meta_updates.append(executor.submit(_annotate, item))
                         num_processed += 1
                     case _:
                         num_errors += 1
                         log.error("Unknown item type", path=item)
                         continue
 
-                public_acl = [ac for ac in item.permissions() if is_public_access(ac)]
-                if public_acl and not any(is_public_access(ac) for ac in (acl or [])):
-                    to_null = [
-                        AC(PUBLIC_IRODS_GROUP, Permission.NULL, zone=ac.zone)
-                        for ac in public_acl
-                    ]
-                    acl = (acl or []) + to_null
-
-                if acl is not None:
-                    perm_updates.append(
-                        executor.submit(update_permissions, item, acl=acl)
-                    )
+                new_acl = _calculate_acl_update(item, acl)
+                perm_updates.append(
+                    executor.submit(update_permissions, item, acl=new_acl)
+                )
 
             for future in meta_updates:
                 try:

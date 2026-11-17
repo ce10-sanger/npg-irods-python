@@ -71,6 +71,7 @@ class Platform(Enum):
     PACBIO = 7
     SEQUENOM = 8
     ULTIMA_GENOMICS = 9
+    XENIUM = 10
 
 
 @unique
@@ -280,7 +281,7 @@ def is_xenium(path: PathLike | str) -> bool:
         True if Xenium data.
     """
 
-    return re.match(r"/seq/xenium\b", str(path)) is not None
+    return re.match(r"/seq/10x/xenium\b", str(path)) is not None
 
 
 def infer_data_source(path: PathLike | str) -> Tuple[Platform, AnalysisType]:
@@ -493,3 +494,39 @@ def ensure_secondary_metadata_updated(
         perm_update = update_permissions(item, acl)
 
     return any([meta_update, cons_update, perm_update])
+
+
+def is_checksum(path: PurePath) -> bool:
+    """Test whether a filesystem/iRODS path is a checksum file (e.g. .md5).
+
+    Args:
+        path: A filesystem or iRODS path.
+
+    Returns:
+        True if a checksum file (e.g. .md5).
+    """
+    return path.suffix.lower() == ".md5"
+
+
+def is_macos_finder_metadata(path: PurePath) -> bool:
+    """Test whether a filesystem/iRODS path is a macOS Finder metadata file (.DS_Store).
+
+    Args:
+        path: A filesystem or iRODS path.
+
+    Returns:
+        True if a macOS Finder metadata file (.DS_Store).
+    """
+    return path.name == ".DS_Store"
+
+
+def is_windows_thumbnails_cache(path: PurePath) -> bool:
+    """Test whether a filesystem/iRODS path is a Windows thumbnails cache file (Thumbs.db).
+
+    Args:
+        path: A filesystem or iRODS path.
+
+    Returns:
+        True if a Windows thumbnails cache file (Thumbs.db).
+    """
+    return path.name == "Thumbs.db"

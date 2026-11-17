@@ -12,7 +12,7 @@ jobs:
         shell: bash -l -e -o pipefail {0}
 
     env:
-      SINGULARITY_VERSION: "4.2.2"
+      SINGULARITY_VERSION: "4.6.0"
 
     strategy:
       matrix:
@@ -21,6 +21,10 @@ jobs:
           { version: "4.2.7",
             client_image: "ghcr.io/wtsi-npg/ub-16.04-irods-clients-4.2.7:latest",
             server_image: "ghcr.io/wtsi-npg/ub-16.04-irods-4.2.7:latest",
+            experimental: true },
+          { version: "4.2.7-engineering",
+            client_image: "ghcr.io/wtsi-npg/ub-16.04-irods-clients-4.2.7-engineering:latest",
+            server_image: "ghcr.io/wtsi-npg/ub-16.04-irods-4.2.7-engineering:latest",
             experimental: false },
           { version: "4.3.4",
             client_image: "ghcr.io/wtsi-npg/ub-22.04-irods-clients-4.3.4:latest",

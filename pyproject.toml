@@ -11,19 +11,21 @@ classifiers = [
     "Programming Language :: Python"
 ]
 keywords = ["irods", "npg"]
-requires-python = ">=3.12"
+# >= 3.13 for partisan, >= 3.13.18 for eMudhra
+requires-python = ">=3.13.18"
 
 dynamic = ["version"]
 
 dependencies = [
-    "npg-python-lib >=2,<3",
+    "certifi >= 2026.10.19",
+    "npg-python-lib >=2.4,<3",
     "npg_id_generation >=5.0.1",
     "npgmlwarehouse-python", # TODO: Remove workaround
     "partisan >=4.3,<5",
     "pymysql >=1.1.1",
-    "python-dateutil >=2.9,<3",
-    "sqlalchemy >=2",
-    "structlog >=25",
+    "python-dateutil >=4,<5",
+    "sqlalchemy >=2.1",
+    "structlog >=26",
     "yattag"
 ]
 
@@ -31,7 +33,6 @@ dependencies = [
 test = [
     "black >=26,<27",
     "pytest >=9,<10",
-    "sqlalchemy-utils >=0.41.0",
 ]
 
 [project.urls]
@@ -47,10 +48,13 @@ repository = "https://github.com/wtsi-npg/npg-irods-python.git"
 "checksum-directory" = "npg_irods.cli.checksum_directory:main"
 "copy-confirm" = "npg_irods.cli.copy_confirm:main"
 "diff-xenium" = "npg_irods.cli.diff_xenium:main"
+"get-xenium-output-directories" = "npg_irods.cli.get_xenium_output_directories:main"
+"get-recently-created-directories" = "npg_irods.cli.get_recently_created_directories:main"
 "irods-diff" = "npg_irods.cli.irods_diff:main"
 "irods-ls" = "npg_irods.cli.irods_list:main"
 "list-commands" = "npg_irods.cli.list_commands:main"
 "locate-data-objects" = "npg_irods.cli.locate_data_objects:main"
+"mlwh-change-monitor" = "npg_irods.cli.mlwh_change_monitor:main"
 "publish-directory" = "npg_irods.cli.publish_directory:main"
 "publish-xenium-results" = "npg_irods.cli.publish_xenium_results:main"
 "repair-common-metadata" = "npg_irods.cli.repair_common_metadata:main"
