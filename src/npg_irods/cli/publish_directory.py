@@ -20,7 +20,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Callable
 
 import structlog
 from npg.cli import add_logging_arguments, integer_in_range
