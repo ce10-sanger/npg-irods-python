@@ -116,6 +116,10 @@ class TestDiffXeniumScript:
         assert filter_fn(diff.DiffEntry("nested/.DS_Store", diff.KIND_FILE)) is True
         assert filter_fn(diff.DiffEntry(".DS_Store.backup", diff.KIND_FILE)) is False
         assert filter_fn(diff.DiffEntry("my.DS_Store", diff.KIND_FILE)) is False
+        assert filter_fn(diff.DiffEntry("Thumbs.db", diff.KIND_FILE)) is True
+        assert filter_fn(diff.DiffEntry("nested/Thumbs.db", diff.KIND_FILE)) is True
+        assert filter_fn(diff.DiffEntry("Thumbs.db.backup", diff.KIND_FILE)) is False
+        assert filter_fn(diff.DiffEntry("myThumbs.db", diff.KIND_FILE)) is False
         assert (
             capsys.readouterr().out
             == "= experiment /irods/xenium/XETG00000/0000000/experiment\n"

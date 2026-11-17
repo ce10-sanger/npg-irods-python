@@ -26,6 +26,7 @@ from npg.cli import add_logging_arguments
 from npg.log import configure_structlog
 
 from npg_irods import add_appinfo_structlog_processor, version
+from npg_irods.common import is_macos_finder_metadata, is_windows_thumbnails_cache
 from npg_irods.diff import (
     DiffEntry,
     DiffRow,
@@ -118,11 +119,12 @@ def main():
 
     def filter_item(item: DiffEntry):
         """
-        Ignores macOS Finder metadata
+        Filter out known non-instrument output.
         Unlike publish-xenium-results, be more conservative and don't ignore
         symbolic links and non-files/directories.
         """
-        return item.name == ".DS_Store"
+        path = PurePath(item.path)
+        return is_macos_finder_metadata(path) or is_windows_thumbnails_cache(path)
 
     has_non_same = False
 
